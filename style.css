@@ -309,7 +309,9 @@ textarea {
 .method-card p,
 .quote-card blockquote,
 .long-copy p,
-.media-placeholder {
+.media-placeholder,
+.caption-note,
+.rich-copy p {
   color: var(--muted);
 }
 
@@ -345,6 +347,11 @@ textarea {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.single-stat-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: 18px;
+}
+
 .quote-group {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
@@ -375,6 +382,10 @@ textarea {
 .contact-panel,
 .media-card {
   padding: 28px;
+}
+
+.top-gap {
+  margin-top: 24px;
 }
 
 .belief-card span,
@@ -515,9 +526,9 @@ th {
   content: "−";
 }
 
-.accordion-list p {
+.accordion-list p,
+.rich-copy p {
   margin: 14px 0 0;
-  color: var(--muted);
 }
 
 .media-card {
@@ -554,6 +565,15 @@ th {
   background: var(--paper-soft);
 }
 
+.placeholder-tall {
+  min-height: 280px;
+}
+
+.caption-note {
+  margin-top: 14px;
+  font-size: 0.95rem;
+}
+
 .contact-panel {
   display: grid;
   grid-template-columns: 1.1fr 0.9fr;
@@ -582,7 +602,8 @@ th {
   .five-up,
   .three-up,
   .quote-group,
-  .stats-grid {
+  .stats-grid,
+  .single-stat-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -638,7 +659,8 @@ th {
   .four-up,
   .five-up,
   .quote-group,
-  .stats-grid {
+  .stats-grid,
+  .single-stat-grid {
     grid-template-columns: 1fr;
   }
 
