@@ -146,17 +146,15 @@ textarea {
   min-height: 100vh;
   display: grid;
   place-items: center;
-  background:
-    linear-gradient(var(--hero-veil), rgba(11, 17, 26, 0.74)),
-    url("images/ntulib-night-cover.jpg") center center / cover no-repeat;
+  background: #0b111a url("images/ntulib-night-cover.jpg") center center / cover no-repeat;
 }
 
 .hero-backdrop {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.12), transparent 24%),
-    linear-gradient(180deg, rgba(200, 153, 71, 0.04), rgba(200, 153, 71, 0.14));
+    linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)),
+    radial-gradient(circle at 50% 20%, rgba(255, 255, 255, 0.08), transparent 24%);
 }
 
 .hero-inner,
