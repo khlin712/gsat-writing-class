@@ -16,6 +16,23 @@
     <meta property="og:type" content="website" />
     <meta property="og:locale" content="zh_TW" />
     <link rel="stylesheet" href="style.css" />
+    <style>
+      .course-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      @media (max-width: 1040px) {
+        .course-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 760px) {
+        .course-grid {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
   </head>
   <body>
     <header class="site-header">
