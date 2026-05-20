@@ -388,6 +388,89 @@ textarea {
   margin-top: 24px;
 }
 
+.top-gap-sm {
+  margin-top: 14px;
+}
+
+.top-gap-lg {
+  margin-top: 48px;
+}
+
+.statement-panel {
+  max-width: 920px;
+  margin: 0 auto;
+  padding: 40px 44px;
+  background: rgba(255, 253, 249, 0.95);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  text-align: center;
+}
+
+.statement-panel p,
+.statement-card p,
+.method-slab p,
+.feedback-placeholder-card p {
+  margin: 0;
+}
+
+.highlight-panel {
+  background:
+    linear-gradient(180deg, rgba(23, 63, 116, 0.04), rgba(200, 153, 71, 0.1)),
+    rgba(255, 253, 249, 0.95);
+}
+
+.statement-panel p {
+  font-size: clamp(1.18rem, 2vw, 1.5rem);
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.statement-card,
+.method-slab {
+  min-height: 220px;
+  display: flex;
+  align-items: center;
+}
+
+.statement-card p,
+.method-slab p {
+  font-size: 1.08rem;
+  color: var(--ink);
+  font-weight: 600;
+}
+
+.subsection-heading h3 {
+  margin: 0;
+  font-size: 1.6rem;
+  color: var(--brand-deep);
+}
+
+.feedback-placeholder-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 24px;
+}
+
+.feedback-placeholder-card {
+  min-height: 320px;
+  padding: 28px;
+  background: rgba(255, 253, 249, 0.95);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.feedback-placeholder-card p {
+  color: var(--ink);
+  font-size: 1.08rem;
+  font-weight: 700;
+}
+
+.cta-panel {
+  align-items: start;
+}
+
 .belief-card span,
 .quote-tag {
   display: inline-block;
@@ -603,7 +686,8 @@ th {
   .three-up,
   .quote-group,
   .stats-grid,
-  .single-stat-grid {
+  .single-stat-grid,
+  .feedback-placeholder-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -660,8 +744,13 @@ th {
   .five-up,
   .quote-group,
   .stats-grid,
-  .single-stat-grid {
+  .single-stat-grid,
+  .feedback-placeholder-grid {
     grid-template-columns: 1fr;
+  }
+
+  .statement-panel {
+    padding: 32px 24px;
   }
 
   .button {
