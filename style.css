@@ -148,7 +148,7 @@ textarea {
   place-items: center;
   background:
     linear-gradient(var(--hero-veil), rgba(11, 17, 26, 0.74)),
-    url("images/ntulib-night.jpg") center center / cover no-repeat;
+    url("images/ntulib-night-cover.jpg") center center / cover no-repeat;
 }
 
 .hero-backdrop {
@@ -320,7 +320,7 @@ textarea {
 
 .course-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 28px;
 }
 
@@ -380,7 +380,7 @@ textarea {
   color: #fff;
   background:
     linear-gradient(180deg, rgba(10, 16, 24, 0.86), rgba(23, 41, 70, 0.9)),
-    url("images/ntulib-night.jpg") center center / cover no-repeat;
+    url("images/ntulib-night-cover.jpg") center center / cover no-repeat;
 }
 
 .page-banner p:last-child {
@@ -794,7 +794,6 @@ th {
 }
 
 @media (max-width: 1040px) {
-  .course-grid,
   .four-up,
   .five-up,
   .three-up,
@@ -809,6 +808,10 @@ th {
   .two-up,
   .contact-panel {
     grid-template-columns: 1fr;
+  }
+
+  .course-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .tagline-grid {
