@@ -172,7 +172,7 @@ textarea {
 .hero-label,
 .section-kicker {
   margin: 0 0 12px;
-  font-size: 0.82rem;
+  font-size: 16px;
   letter-spacing: 0.18em;
   text-transform: uppercase;
   color: var(--accent-soft);
@@ -647,6 +647,12 @@ textarea {
   max-width: 920px;
 }
 
+.results-showcase-heading .section-kicker {
+  font-size: 28px;
+  letter-spacing: 0.06em;
+  text-transform: none;
+}
+
 .result-showcase-subtitle {
   margin-top: 18px;
   max-width: 760px;
@@ -678,9 +684,16 @@ textarea {
   display: inline-block;
   margin-bottom: 12px;
   color: #b9781f;
-  font-size: 0.82rem;
   font-weight: 800;
   letter-spacing: 0.12em;
+}
+
+.results-stat-label {
+  font-size: 16px;
+}
+
+.results-side-kicker {
+  font-size: 16px;
 }
 
 .results-stat-card strong {
