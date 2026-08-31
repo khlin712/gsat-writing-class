@@ -1988,3 +1988,65 @@ body[data-theme="dark"] .social-panel {
     font-size: 0.64rem;
   }
 }
+
+
+/* Course landing-page refinements. */
+.hero::before {
+  background:
+    url("images/ntulib-night.jpg"),
+    url("images/ntulib(night).heic");
+}
+
+.hero::after {
+  background: rgba(0, 0, 0, 0.5);
+  animation: none;
+  transform: none;
+}
+
+.hero-backdrop {
+  background-image: none;
+}
+
+.hero h1 {
+  max-width: 1180px;
+  font-size: clamp(3.3rem, 6vw, 6rem);
+  line-height: 1.22;
+}
+
+.hero h1 span {
+  max-width: 100%;
+  font-size: 0.84em;
+  line-height: 1.26;
+  overflow-wrap: anywhere;
+}
+
+.courses-section .course-grid {
+  display: block;
+  max-width: 840px;
+  margin: 0 auto;
+}
+
+.courses-section .course-feature {
+  width: 100%;
+  min-height: 590px;
+}
+
+@media (max-width: 760px) {
+  .hero h1 {
+    max-width: 100%;
+    font-size: clamp(2.25rem, 10vw, 4rem);
+    line-height: 1.3;
+  }
+
+  .hero h1 span {
+    font-size: 0.76em;
+  }
+
+  .courses-section .course-grid {
+    max-width: 100%;
+  }
+
+  .courses-section .course-feature {
+    min-height: 500px;
+  }
+}
