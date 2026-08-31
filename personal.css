@@ -1992,9 +1992,10 @@ body[data-theme="dark"] .social-panel {
 
 /* Course landing-page refinements. */
 .hero::before {
-  background:
-    url("images/ntulib-night.jpg"),
-    url("images/ntulib(night).heic");
+  background-image: url("images/ntulib-night-browser.jpg");
+  background-position: center 30%;
+  background-size: cover;
+  background-repeat: no-repeat;
 }
 
 .hero::after {
