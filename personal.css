@@ -1650,6 +1650,15 @@ body[data-theme="dark"] .social-panel {
   line-height: 1;
 }
 
+.hub-social-label {
+  font-family: "Space Grotesk", "Noto Sans TC", sans-serif;
+  font-size: 0.78rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  white-space: nowrap;
+}
+
 .hub-social small {
   font-size: 0.62rem;
   font-weight: 800;
@@ -1707,6 +1716,11 @@ body[data-theme="dark"] .social-panel {
 
   .hub-social-mark {
     font-size: 1.05rem;
+  }
+
+  .hub-social-label {
+    font-size: 0.6rem;
+    letter-spacing: 0.01em;
   }
 
   .hub-social small {
@@ -1999,7 +2013,7 @@ body[data-theme="dark"] .social-panel {
 }
 
 .hero::after {
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.35);
   animation: none;
   transform: none;
 }
