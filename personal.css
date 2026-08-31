@@ -273,17 +273,20 @@ button {
 
 .hero-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.08fr) minmax(320px, 0.72fr);
-  align-items: end;
-  gap: clamp(48px, 8vw, 116px);
+  grid-template-columns: minmax(0, 1fr);
+  align-items: center;
+  gap: 0;
   padding-top: 156px;
   padding-bottom: 106px;
 }
 
 .hero-copy {
   align-self: center;
-  max-width: 760px;
+  width: 100%;
+  max-width: 1000px;
+  margin: 0 auto;
   color: #fff;
+  text-align: center;
 }
 
 .hero-kicker,
@@ -322,8 +325,8 @@ button {
 }
 
 .hero h1 {
-  max-width: 920px;
-  margin: 0;
+  max-width: 1000px;
+  margin: 0 auto;
   color: #fff;
   font-family: var(--display);
   font-size: clamp(2.65rem, 5.2vw, 5.4rem);
@@ -1373,7 +1376,7 @@ body[data-theme="dark"] .social-panel {
   }
 
   .hero-layout {
-    gap: 42px;
+    gap: 0;
     padding-top: 132px;
     padding-bottom: 94px;
   }
