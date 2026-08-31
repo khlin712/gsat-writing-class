@@ -23,7 +23,7 @@
     />
     <link rel="stylesheet" href="personal.css" />
   </head>
-  <body data-theme="light">
+  <body data-theme="dark">
     <a class="skip-link" href="#main">跳至主要內容</a>
 
     <header class="site-header" id="siteHeader">
@@ -43,10 +43,6 @@
           <a href="#contact">聯絡</a>
         </nav>
 
-        <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換深色模式">
-          <span class="theme-toggle-icon" aria-hidden="true">◐</span>
-          <span class="theme-toggle-label">亮色</span>
-        </button>
       </div>
     </header>
 
@@ -76,16 +72,20 @@
               <a class="hub-link" href="#courses"><span class="hub-link-index">04</span><span class="hub-link-copy"><strong>課程介紹</strong><small>COURSE INTRODUCTION</small></span><span class="hub-link-arrow" aria-hidden="true">↗</span></a>
               <a class="hub-link" href="#contact"><span class="hub-link-index">05</span><span class="hub-link-copy"><strong>教學行事曆</strong><small>SCHEDULE / CONTACT FOR DETAILS</small></span><span class="hub-link-arrow" aria-hidden="true">↗</span></a>
               <a class="hub-link" href="https://line.me/ti/p/2rcgyFdA-b" target="_blank" rel="noopener noreferrer"><span class="hub-link-index">06</span><span class="hub-link-copy"><strong>教學試聽（私訊）</strong><small>LINE / PRIVATE MESSAGE</small></span><span class="hub-link-arrow" aria-hidden="true">↗</span></a>
-              <a class="hub-link" href="https://classroom.google.com/" target="_blank" rel="noopener noreferrer"><span class="hub-link-index">07</span><span class="hub-link-copy"><strong>Google Classroom</strong><small>第一手課程資訊與寫作學習文章</small></span><span class="hub-link-arrow" aria-hidden="true">↗</span></a>
             </nav>
             <aside class="link-hub-social" aria-label="社群連結">
-              <div class="hub-social-heading"><p class="section-kicker">SOCIAL / CONTACT</p><h3>聯繫我：</h3></div>
+              <div class="hub-social-heading"><p class="section-kicker">SOCIAL / CONTACT</p><h3>聯繫方式</h3></div>
               <div class="hub-social-grid">
                 <a class="hub-social hub-social-line" href="https://line.me/ti/p/2rcgyFdA-b" target="_blank" rel="noopener noreferrer" aria-label="LINE"><span class="hub-social-mark">LINE</span><small>MESSAGE</small></a>
                 <a class="hub-social hub-social-facebook" href="https://www.facebook.com/0kh127" target="_blank" rel="noopener noreferrer" aria-label="Facebook"><span class="hub-social-mark">f</span><small>FACEBOOK</small></a>
                 <a class="hub-social hub-social-threads" href="https://www.threads.com/@0kh127" target="_blank" rel="noopener noreferrer" aria-label="Threads"><span class="hub-social-mark">@</span><small>THREADS</small></a>
                 <a class="hub-social hub-social-instagram" href="https://www.instagram.com/0kh127" target="_blank" rel="noopener noreferrer" aria-label="Instagram"><span class="hub-social-mark">◎</span><small>INSTAGRAM</small></a>
               </div>
+              <a class="hub-classroom" href="https://classroom.google.com/" target="_blank" rel="noopener noreferrer">
+                <span class="hub-classroom-icon" aria-hidden="true">G</span>
+                <span class="hub-classroom-copy"><strong>Google Classroom</strong><small>第一手課程資訊與寫作學習文章</small></span>
+                <span class="hub-classroom-arrow" aria-hidden="true">↗</span>
+              </a>
             </aside>
           </div>
         </div>
@@ -253,33 +253,7 @@
     </footer>
 
     <script>
-      const body = document.body;
-      const themeToggle = document.querySelector("#themeToggle");
-      const themeLabel = document.querySelector(".theme-toggle-label");
       const siteHeader = document.querySelector("#siteHeader");
-
-      const setTheme = (theme) => {
-        body.dataset.theme = theme;
-        const isDark = theme === "dark";
-        themeLabel.textContent = isDark ? "深色" : "亮色";
-        themeToggle.setAttribute("aria-label", isDark ? "切換亮色模式" : "切換深色模式");
-        try {
-          localStorage.setItem("khlin-theme", theme);
-        } catch (error) {
-          // Private browsing modes may block localStorage; the page still works.
-        }
-      };
-
-      try {
-        const savedTheme = localStorage.getItem("khlin-theme");
-        if (savedTheme === "dark" || savedTheme === "light") setTheme(savedTheme);
-      } catch (error) {
-        // Keep the default light theme when storage is unavailable.
-      }
-
-      themeToggle.addEventListener("click", () => {
-        setTheme(body.dataset.theme === "dark" ? "light" : "dark");
-      });
 
       document.querySelectorAll('a[href^="#"]').forEach((link) => {
         link.addEventListener("click", (event) => {

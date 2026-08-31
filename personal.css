@@ -1907,3 +1907,84 @@ body[data-theme="dark"] .social-panel {
     transition: none;
   }
 }
+
+
+.hub-classroom {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  min-height: 92px;
+  margin-top: 18px;
+  padding: 16px 18px;
+  border: 1px solid rgba(27, 77, 74, 0.22);
+  border-radius: 18px;
+  background: var(--brand-deep);
+  color: #fff;
+  box-shadow: 0 12px 26px rgba(18, 55, 53, 0.14);
+  transition: background-color 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.hub-classroom:hover,
+.hub-classroom:focus-visible {
+  border-color: rgba(183, 234, 146, 0.72);
+  background: #1d5954;
+  transform: translateY(-3px);
+}
+
+.hub-classroom-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: #f0b52d;
+  color: #fff;
+  font-family: "Space Grotesk", "Noto Sans TC", sans-serif;
+  font-size: 1.25rem;
+  font-weight: 900;
+  box-shadow: inset 0 -3px 0 rgba(126, 79, 0, 0.18);
+}
+
+.hub-classroom-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.hub-classroom-copy strong {
+  font-family: var(--display);
+  font-size: clamp(1rem, 2.1vw, 1.28rem);
+  line-height: 1.3;
+}
+
+.hub-classroom-copy small {
+  color: rgba(255, 255, 255, 0.66);
+  font-size: 0.69rem;
+  line-height: 1.6;
+}
+
+.hub-classroom-arrow {
+  color: var(--mint);
+  font-size: 1.45rem;
+  line-height: 1;
+}
+
+@media (max-width: 760px) {
+  .hub-classroom {
+    grid-template-columns: 38px minmax(0, 1fr) auto;
+    gap: 12px;
+    min-height: 78px;
+    margin-top: 14px;
+    padding: 14px;
+    border-radius: 16px;
+  }
+
+  .hub-classroom-copy strong {
+    font-size: 1rem;
+  }
+
+  .hub-classroom-copy small {
+    font-size: 0.64rem;
+  }
+}
