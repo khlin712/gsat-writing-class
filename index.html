@@ -3,113 +3,379 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>萬能考場作文：理論與實作｜課程入口首頁</title>
+    <meta name="theme-color" content="#173b3a" />
     <meta
       name="description"
-      content="萬能考場作文：理論與實作課程入口首頁，整理學測國寫、英文作文、學測衝刺與學測先修課程。"
+      content="林鍇弦的個人連結頁：作文教學、表達力訓練、身體經驗與系統工作的整合入口。"
     />
-    <meta property="og:title" content="萬能考場作文：理論與實作｜課程入口首頁" />
+    <meta property="og:title" content="林鍇弦｜個人連結頁" />
     <meta
       property="og:description"
-      content="用乾淨專業的課程入口版面整理所有課程，適合部署在 GitHub Pages。"
+      content="把課程、作品、教學資源與合作聯絡，整理成一頁。"
     />
     <meta property="og:type" content="website" />
-    <meta property="og:locale" content="zh_TW" />
-    <link rel="stylesheet" href="style.css" />
-    <style>
-      .course-grid {
-        grid-template-columns: repeat(3, minmax(0, 1fr));
-      }
-
-      @media (max-width: 1040px) {
-        .course-grid {
-          grid-template-columns: repeat(2, minmax(0, 1fr));
-        }
-      }
-
-      @media (max-width: 760px) {
-        .course-grid {
-          grid-template-columns: 1fr;
-        }
-      }
-    </style>
+    <title>林鍇弦｜個人連結頁</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800;900&family=Noto+Serif+TC:wght@600;700;900&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="personal.css" />
   </head>
-  <body>
-    <header class="site-header">
-      <div class="container nav-shell">
-        <a class="brand" href="index.html">萬能考場作文</a>
-        <button
-          class="nav-toggle"
-          type="button"
-          aria-expanded="false"
-          aria-controls="site-nav"
-          aria-label="切換導覽選單"
-        >
-          <span></span>
-          <span></span>
-          <span></span>
-        </button>
-        <nav class="site-nav" id="site-nav" aria-label="主要導覽">
-          <a class="is-current" href="index.html">首頁</a>
-          <a href="result.html">成果證明</a>
-          <a href="feedback.html">學生回饋</a>
-          <a href="method.html">教學方法</a>
-          <a href="difference.html">課程差異</a>
-          <a href="#cta">聯絡我</a>
+  <body data-theme="light">
+    <a class="skip-link" href="#main">跳至主要內容</a>
+
+    <header class="site-header" id="siteHeader">
+      <div class="container nav-wrap">
+        <a class="brand" href="#top" aria-label="回到首頁">
+          <span class="brand-mark" aria-hidden="true">KH</span>
+          <span class="brand-copy">
+            <strong>林鍇弦</strong>
+            <small>PERSONAL LINK PAGE</small>
+          </span>
+        </a>
+
+        <nav class="site-nav" aria-label="主要選單">
+          <a href="#links">連結</a>
+          <a href="#courses">課程</a>
+          <a href="#about">關於我</a>
+          <a href="#contact">聯絡</a>
         </nav>
+
+        <button class="theme-toggle" id="themeToggle" type="button" aria-label="切換深色模式">
+          <span class="theme-toggle-icon" aria-hidden="true">◐</span>
+          <span class="theme-toggle-label">亮色</span>
+        </button>
       </div>
     </header>
 
-    <main>
-      <section class="hero hero-catalog">
-        <div class="hero-backdrop"></div>
-        <div class="container hero-inner">
-          <h1>萬能考場作文：理論與實作</h1>
-          <div class="catalog-tags" aria-label="課程分類">
-            <span>學測國寫</span>
-            <span>國寫決勝180天</span>
-            <span>極限衝刺90天</span>
-            <span>高一先修</span>
+    <main id="main">
+      <section class="hero" id="top" aria-labelledby="hero-title">
+        <div class="hero-backdrop" aria-hidden="true"></div>
+        <div class="hero-overlay" aria-hidden="true"></div>
+        <div class="container hero-layout">
+          <div class="hero-copy">
+            <p class="hero-kicker"><span class="live-dot"></span>PERSONAL LINK PAGE / 2026</p>
+            <h1 id="hero-title">學測國寫<span>萬能考場作文：理論與實作</span></h1>
+            <p class="hero-intro">
+              台灣大學社會工作學系｜作文教學｜身體經驗與系統工作
+            </p>
+            <p class="hero-description">
+              從學習與表達出發，也看見身體、關係與生命脈絡。這裡收好我的課程、作品、教學資源與合作入口。
+            </p>
+            <div class="hero-actions">
+              <a class="button button-primary" href="#links">
+                探索我的連結 <span aria-hidden="true">↗</span>
+              </a>
+              <a class="button button-ghost" href="../me/">
+                認識我 <span aria-hidden="true">→</span>
+              </a>
+            </div>
+            <div class="hero-tags" aria-label="專業領域">
+              <span>作文教學</span>
+              <span>表達力</span>
+              <span>身體經驗</span>
+              <span>系統工作</span>
+            </div>
           </div>
-          <p class="catalog-hero-line">作文還能這樣教？<br />創新教學方式，卓越成績表現</p>
-          <p class="catalog-hero-subline">不論情意知性，都不再需要靠天賦、賭運氣</p>
-          <div class="hero-divider" aria-hidden="true"></div>
+
+          <aside class="hero-panel" aria-label="快速入口">
+            <div class="panel-orbit orbit-one" aria-hidden="true"></div>
+            <div class="panel-orbit orbit-two" aria-hidden="true"></div>
+            <div class="profile-badge" aria-hidden="true">KH</div>
+            <p class="panel-label">從這裡開始</p>
+            <h2>找到你需要的入口</h2>
+            <p class="panel-description">課程、介紹、資源與合作，往下點就能到。</p>
+            <div class="mini-links">
+              <a class="mini-link" href="#courses">
+                <span class="mini-link-number">01</span>
+                <span>課程與教學資源</span>
+                <span class="mini-link-arrow" aria-hidden="true">↗</span>
+              </a>
+              <a class="mini-link" href="../me/">
+                <span class="mini-link-number">02</span>
+                <span>關於我與工作方式</span>
+                <span class="mini-link-arrow" aria-hidden="true">↗</span>
+              </a>
+              <a class="mini-link" href="#contact">
+                <span class="mini-link-number">03</span>
+                <span>合作／預約諮詢</span>
+                <span class="mini-link-arrow" aria-hidden="true">↗</span>
+              </a>
+            </div>
+            <div class="panel-footer">
+              <span class="panel-status"><span class="status-dot"></span>OPEN FOR CONNECTIONS</span>
+              <span class="panel-location">Taipei, Taiwan</span>
+            </div>
+          </aside>
+        </div>
+        <a class="scroll-cue" href="#links">
+          <span>SCROLL TO EXPLORE</span>
+          <span class="scroll-cue-arrow" aria-hidden="true">↓</span>
+        </a>
+      </section>
+
+      <section class="section links-section" id="links" aria-labelledby="links-title">
+        <div class="container">
+          <div class="section-heading align-left section-heading-wide">
+            <p class="section-kicker">01 / All the doors</p>
+            <h2 id="links-title">一頁，收好所有入口。</h2>
+            <p>想看課程、認識我的工作，或只是想找到聯絡方式，從下面任一張卡片開始。</p>
+          </div>
+
+          <div class="link-board">
+            <a class="link-tile link-tile-feature" href="#courses">
+              <span class="tile-number">01</span>
+              <span class="tile-icon tile-icon-star" aria-hidden="true">✦</span>
+              <span class="tile-body">
+                <span class="tile-kicker">FEATURED / COURSE</span>
+                <strong>萬能考場作文：理論與實作</strong>
+                <span>把審題、立意、結構與修稿，拆成可以練習的步驟。</span>
+                <span class="tile-cta">查看課程 <span aria-hidden="true">↗</span></span>
+              </span>
+            </a>
+
+            <a class="link-tile link-tile-warm" href="../me/">
+              <span class="tile-icon" aria-hidden="true">◎</span>
+              <span class="tile-body">
+                <span class="tile-kicker">ABOUT / PROFILE</span>
+                <strong>認識我</strong>
+                <span>教育、身體經驗與系統工作的交會。</span>
+                <span class="tile-cta">進入自我介紹 <span aria-hidden="true">↗</span></span>
+              </span>
+            </a>
+
+            <a class="link-tile link-tile-light" href="#method">
+              <span class="tile-icon" aria-hidden="true">↯</span>
+              <span class="tile-body">
+                <span class="tile-kicker">METHOD / PROCESS</span>
+                <strong>我怎麼工作</strong>
+                <span>溫和、清楚，尊重每個人的速度。</span>
+                <span class="tile-cta">看工作方式 <span aria-hidden="true">↗</span></span>
+              </span>
+            </a>
+
+            <a class="link-tile link-tile-dark" href="#contact">
+              <span class="tile-icon" aria-hidden="true">@</span>
+              <span class="tile-body">
+                <span class="tile-kicker">CONTACT / COLLABORATE</span>
+                <strong>合作與聯絡</strong>
+                <span>課程、工作坊、個人陪伴或跨領域合作。</span>
+                <span class="tile-cta">和我聊聊 <span aria-hidden="true">↗</span></span>
+              </span>
+            </a>
+          </div>
         </div>
       </section>
 
-      <section class="section course-directory" id="courses">
-        <div class="container">
-          <div class="section-heading">
-            <h2>所有課程</h2>
+      <section class="section about-section" id="about" aria-labelledby="about-title">
+        <div class="container about-grid">
+          <div class="about-lead-card">
+            <p class="section-kicker">02 / A wider view</p>
+            <h2 id="about-title">不只教你寫得更好，也陪你看見自己怎麼思考。</h2>
+            <a class="text-link" href="../me/">閱讀完整自我介紹 <span aria-hidden="true">↗</span></a>
           </div>
+          <div class="about-copy-card">
+            <p>
+              我目前就讀於台灣大學社會工作學系，持續在助人專業、教育現場與身心工作之間累積實務經驗。
+            </p>
+            <p>
+              我相信人的困境很少只在單一層面發生：學習挫折、身體緊繃、關係卡住，以及更大的家庭或社會脈絡，常常同時存在。
+            </p>
+            <div class="about-stat-row">
+              <div>
+                <strong>01</strong>
+                <span>教育與表達</span>
+              </div>
+              <div>
+                <strong>02</strong>
+                <span>身體與感受</span>
+              </div>
+              <div>
+                <strong>03</strong>
+                <span>關係與系統</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-dark courses-section" id="courses" aria-labelledby="courses-title">
+        <div class="container">
+          <div class="section-heading section-heading-dark align-left">
+            <p class="section-kicker">03 / What I share</p>
+            <h2 id="courses-title">把抽象能力，變成可以走的路。</h2>
+            <p>目前以作文教學與整合型陪伴為主要入口，後續也會持續整理新的文章、課程與活動。</p>
+          </div>
+
           <div class="course-grid">
-            <article class="course-card">
-              <div class="course-cover-placeholder" aria-label="圖片／課程封面">圖片／課程封面</div>
-              <div class="course-card-body">
-                <h3>116學測班｜國寫決勝180日</h3>
-                <p>你的情意知性題救星</p>
-                <a class="button button-primary course-button" href="#">詳細資訊</a>
+            <a class="course-feature" href="#contact">
+              <div class="course-feature-top">
+                <span>MAIN OFFER / 01</span>
+                <span class="course-badge">NOW SHARING</span>
               </div>
-            </article>
-            <article class="course-card">
-              <div class="course-cover-placeholder" aria-label="圖片／課程封面">圖片／課程封面</div>
-              <div class="course-card-body">
-                <h3>鞏固基礎：學測國寫架構班</h3>
-                <p>適用「非」116年學測考生</p>
-                <a class="button button-primary course-button" href="#">詳細資訊</a>
+              <div class="course-feature-copy">
+                <h3>萬能考場作文<br /><em>理論與實作</em></h3>
+                <p>學測國寫 × 中小學表達力。讓審題、發想、寫作與修稿，都有清楚的練習節奏。</p>
               </div>
+              <span class="course-feature-link">詢問課程 <span aria-hidden="true">↗</span></span>
+            </a>
+
+            <div class="course-list" aria-label="其他入口">
+              <a class="course-list-item" href="#method">
+                <span class="course-list-number">02</span>
+                <span>
+                  <strong>教學方法</strong>
+                  <small>拆解評分邏輯，練習表達與修正。</small>
+                </span>
+                <span aria-hidden="true">↗</span>
+              </a>
+              <a class="course-list-item" href="../me/">
+                <span class="course-list-number">03</span>
+                <span>
+                  <strong>整合工作</strong>
+                  <small>從身體、關係與系統脈絡理解一個人。</small>
+                </span>
+                <span aria-hidden="true">↗</span>
+              </a>
+              <a class="course-list-item" href="#contact">
+                <span class="course-list-number">04</span>
+                <span>
+                  <strong>合作邀請</strong>
+                  <small>課程、工作坊與跨領域合作都歡迎來信。</small>
+                </span>
+                <span aria-hidden="true">↗</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section method-section" id="method" aria-labelledby="method-title">
+        <div class="container">
+          <div class="section-heading align-left section-heading-wide">
+            <p class="section-kicker">04 / How I work</p>
+            <h2 id="method-title">清楚的結構，留給人呼吸的空間。</h2>
+          </div>
+          <div class="method-grid">
+            <article class="method-card">
+              <span class="method-number">01</span>
+              <h3>先把問題說清楚</h3>
+              <p>從審題、感受與當下處境開始，找到真正需要被處理的問題。</p>
             </article>
+            <article class="method-card method-card-accent">
+              <span class="method-number">02</span>
+              <h3>再把步驟拆開來</h3>
+              <p>把看似抽象的能力，轉成可理解、可練習、可回頭檢查的行動。</p>
+            </article>
+            <article class="method-card">
+              <span class="method-number">03</span>
+              <h3>最後回到自己的選擇</h3>
+              <p>保留每個人的節奏，讓方法成為支持，而不是另一種壓力。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section contact-section" id="contact" aria-labelledby="contact-title">
+        <div class="container">
+          <div class="contact-card">
+            <div class="contact-copy">
+              <p class="section-kicker">05 / Keep in touch</p>
+              <h2 id="contact-title">想一起做點什麼？<br /><span>從一封信開始。</span></h2>
+              <p>課程詢問、工作坊、個人陪伴或跨領域合作，歡迎先把你的想法寄給我。</p>
+              <a class="button button-primary" href="mailto:hello@example.com?subject=合作／課程詢問">
+                寄信聯絡 <span aria-hidden="true">↗</span>
+              </a>
+            </div>
+            <div class="social-panel">
+              <p class="social-panel-label">FIND ME AROUND THE WEB</p>
+              <div class="social-links" id="social-links">
+                <a href="https://github.com/khlin712/khlin712.github.io" target="_blank" rel="noreferrer">
+                  <span class="network-icon network-icon-github" aria-hidden="true">GH</span>
+                  <span><strong>GitHub</strong><small>網站原始碼</small></span>
+                  <span aria-hidden="true">↗</span>
+                </a>
+                <a href="https://www.instagram.com/" target="_blank" rel="noreferrer">
+                  <span class="network-icon network-icon-instagram" aria-hidden="true">◎</span>
+                  <span><strong>Instagram</strong><small>作品與日常</small></span>
+                  <span aria-hidden="true">↗</span>
+                </a>
+                <a href="https://line.me/" target="_blank" rel="noreferrer">
+                  <span class="network-icon network-icon-line" aria-hidden="true">L</span>
+                  <span><strong>LINE</strong><small>課程與合作訊息</small></span>
+                  <span aria-hidden="true">↗</span>
+                </a>
+                <a href="https://www.threads.net/" target="_blank" rel="noreferrer">
+                  <span class="network-icon network-icon-threads" aria-hidden="true">@</span>
+                  <span><strong>Threads</strong><small>短句與觀察</small></span>
+                  <span aria-hidden="true">↗</span>
+                </a>
+              </div>
+              <p class="social-note">社群帳號可直接在這個區塊替換成你的個人網址。</p>
+            </div>
           </div>
         </div>
       </section>
     </main>
 
     <footer class="site-footer">
-      <div class="container footer-shell">
-        <p>© 2026 萬能考場作文：理論與實作</p>
+      <div class="container footer-wrap">
+        <p>© 2026 林鍇弦 · Personal Link Page</p>
+        <div class="footer-links">
+          <a href="#top">回到頁首</a>
+          <a href="../me/">自我介紹</a>
+        </div>
       </div>
     </footer>
 
-    <script src="script.js"></script>
+    <script>
+      const body = document.body;
+      const themeToggle = document.querySelector("#themeToggle");
+      const themeLabel = document.querySelector(".theme-toggle-label");
+      const siteHeader = document.querySelector("#siteHeader");
+
+      const setTheme = (theme) => {
+        body.dataset.theme = theme;
+        const isDark = theme === "dark";
+        themeLabel.textContent = isDark ? "深色" : "亮色";
+        themeToggle.setAttribute("aria-label", isDark ? "切換亮色模式" : "切換深色模式");
+        try {
+          localStorage.setItem("khlin-theme", theme);
+        } catch (error) {
+          // Private browsing modes may block localStorage; the page still works.
+        }
+      };
+
+      try {
+        const savedTheme = localStorage.getItem("khlin-theme");
+        if (savedTheme === "dark" || savedTheme === "light") setTheme(savedTheme);
+      } catch (error) {
+        // Keep the default light theme when storage is unavailable.
+      }
+
+      themeToggle.addEventListener("click", () => {
+        setTheme(body.dataset.theme === "dark" ? "light" : "dark");
+      });
+
+      document.querySelectorAll('a[href^="#"]').forEach((link) => {
+        link.addEventListener("click", (event) => {
+          const targetId = link.getAttribute("href");
+          if (!targetId || targetId === "#") return;
+          const target = document.querySelector(targetId);
+          if (!target) return;
+          event.preventDefault();
+          target.scrollIntoView({ behavior: "smooth", block: "start" });
+          history.replaceState(null, "", targetId);
+        });
+      });
+
+      const updateHeader = () => {
+        siteHeader.classList.toggle("is-scrolled", window.scrollY > 24);
+      };
+      updateHeader();
+      window.addEventListener("scroll", updateHeader, { passive: true });
+    </script>
   </body>
 </html>
