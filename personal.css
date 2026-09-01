@@ -2789,3 +2789,43 @@ body[data-theme="dark"] .social-panel {
     color: var(--brand-deep);
   }
 }
+
+
+.share-button {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 7px;
+  padding: 0 13px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 800;
+  line-height: 1;
+  transition: background-color 180ms ease, border-color 180ms ease, transform 180ms ease;
+}
+
+.share-button:hover,
+.share-button:focus-visible {
+  border-color: var(--accent);
+  background: var(--surface);
+  transform: translateY(-1px);
+}
+
+.share-feedback {
+  color: var(--accent-deep);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .footer-links {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+}

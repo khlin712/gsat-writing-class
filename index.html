@@ -21,7 +21,7 @@
       href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700;800;900&family=Noto+Serif+TC:wght@600;700;900&family=Space+Grotesk:wght@500;600;700&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="personal.css?v=20260902-brand-title" />
+    <link rel="stylesheet" href="personal.css?v=20260902-share" />
   </head>
   <body data-theme="dark">
     <a class="skip-link" href="#main">跳至主要內容</a>
@@ -147,6 +147,8 @@
       <div class="container footer-wrap">
         <p>© 2026 學測國寫｜萬能考場作文：理論與實作</p>
         <div class="footer-links">
+          <button class="share-button" id="share-site-button" type="button">分享網站 <span aria-hidden="true">↗</span></button>
+          <span class="share-feedback" id="share-feedback" role="status" aria-live="polite"></span>
           <a href="#top">回到頁首</a>
         </div>
       </div>
@@ -251,6 +253,64 @@
       });
       pdfModal?.addEventListener("close", () => {
         pdfFrame.src = "about:blank";
+      });
+    </script>
+    <script>
+      const shareButton = document.querySelector("#share-site-button");
+      const shareFeedback = document.querySelector("#share-feedback");
+
+      const getShareUrl = () => {
+        const shareUrl = new URL(window.location.href);
+        shareUrl.hash = "";
+        return shareUrl.href;
+      };
+
+      const copyShareUrl = async (url) => {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(url);
+          return;
+        }
+
+        const fallbackInput = document.createElement("textarea");
+        fallbackInput.value = url;
+        fallbackInput.setAttribute("readonly", "");
+        fallbackInput.style.position = "fixed";
+        fallbackInput.style.opacity = "0";
+        document.body.appendChild(fallbackInput);
+        fallbackInput.select();
+        const copied = document.execCommand("copy");
+        fallbackInput.remove();
+        if (!copied) throw new Error("Unable to copy the share URL");
+      };
+
+      const showShareFeedback = (message) => {
+        if (!shareFeedback) return;
+        shareFeedback.textContent = message;
+        window.setTimeout(() => {
+          shareFeedback.textContent = "";
+        }, 2600);
+      };
+
+      shareButton?.addEventListener("click", async () => {
+        const shareUrl = getShareUrl();
+        const shareData = {
+          title: document.title,
+          text: "學測國寫｜萬能考場作文：理論與實作",
+          url: shareUrl,
+        };
+
+        try {
+          if (navigator.share) {
+            await navigator.share(shareData);
+            showShareFeedback("分享視窗已開啟");
+          } else {
+            await copyShareUrl(shareUrl);
+            showShareFeedback("網站網址已複製");
+          }
+        } catch (error) {
+          if (error?.name === "AbortError") return;
+          showShareFeedback("無法自動分享，請複製網址轉傳");
+        }
       });
     </script>
   </body>
