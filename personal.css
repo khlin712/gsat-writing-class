@@ -18,6 +18,7 @@
   --radius-md: 18px;
   --radius-sm: 12px;
   --container: min(1180px, calc(100% - 40px));
+  --cta-heading-size: clamp(1.9rem, 3.5vw, 2.8rem);
   --display: "Noto Serif TC", "Songti TC", serif;
   color-scheme: light;
 }
@@ -1606,7 +1607,7 @@ body[data-theme="dark"] .social-panel {
 .hub-social-heading h3 {
   margin: 0;
   font-family: var(--display);
-  font-size: clamp(1.9rem, 3.5vw, 2.8rem);
+  font-size: var(--cta-heading-size);
   letter-spacing: 0.01em;
   line-height: 1.3;
 }
@@ -2545,11 +2546,12 @@ body[data-theme="dark"] .social-panel {
 }
 
 
-/* Match the signup copy to the contact heading scale. */
+/* Keep contact and signup headings on one responsive type scale. */
+.hub-social-heading h3,
 .link-hub .hub-signup-copy,
 .link-hub .hub-registration-copy strong,
 .link-hub .hub-registration-copy span {
-  font-size: clamp(1.9rem, 3.5vw, 2.8rem);
+  font-size: var(--cta-heading-size);
   line-height: 1.3;
 }
 
