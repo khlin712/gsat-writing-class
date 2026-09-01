@@ -2389,3 +2389,13 @@ body[data-theme="dark"] .social-panel {
     font-size: 0.75rem;
   }
 }
+
+
+/* Keep the course title on one line on phone screens. */
+@media (max-width: 760px) {
+  .hero h1 span {
+    white-space: nowrap;
+    font-size: clamp(0.95rem, 6.1vw, 1.7rem);
+    letter-spacing: -0.025em;
+  }
+}
