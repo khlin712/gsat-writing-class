@@ -2545,6 +2545,15 @@ body[data-theme="dark"] .social-panel {
 }
 
 
+/* Match the signup copy to the contact heading scale. */
+.link-hub > .hub-signup-copy,
+.link-hub > .hub-registration-copy strong,
+.link-hub > .hub-registration-copy span {
+  font-size: clamp(1.9rem, 3.5vw, 2.8rem);
+  line-height: 1.3;
+}
+
+
 /* Center copy in the full-width signup cards. */
 .link-hub > .hub-signup {
   grid-template-columns: 1fr;
