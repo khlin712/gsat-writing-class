@@ -68,9 +68,9 @@
             <div class="link-hub-column">
               <nav class="link-hub-main" aria-label="課程與教學資源連結">
                 <a class="hub-link" href="difference.html"><span class="hub-link-index">02</span><span class="hub-link-copy"><strong>為何高中一定要學作文？</strong></span><span class="hub-link-arrow" aria-hidden="true">↗</span></a>
-                <a class="hub-link" href="https://drive.google.com/file/d/14z0TBRkitx2D9ZGLkFVB-by1NuSliMMs/view?usp=share_link" target="_blank" rel="noopener noreferrer"><span class="hub-link-index">03</span><span class="hub-link-copy"><strong>過往教學成果與回饋</strong></span><span class="hub-link-arrow" aria-hidden="true">↗</span></a>
-                <a class="hub-link" href="https://drive.google.com/file/d/1M94ixkYF_MJHuXl4JZ-E3qe42Lbs6t8x/view?usp=share_link" target="_blank" rel="noopener noreferrer"><span class="hub-link-index">04</span><span class="hub-link-copy"><strong>課程介紹</strong></span><span class="hub-link-arrow" aria-hidden="true">↗</span></a>
-                <a class="hub-link" href="https://drive.google.com/file/d/1MLbqBKMgGlajHJu48_N1xFo0ISlzCPtE/view?usp=drivesdk" target="_blank" rel="noopener noreferrer"><span class="hub-link-index">05</span><span class="hub-link-copy"><strong>教學行事曆</strong></span><span class="hub-link-arrow" aria-hidden="true">↗</span></a>
+                <a class="hub-link" href="https://drive.google.com/file/d/14z0TBRkitx2D9ZGLkFVB-by1NuSliMMs/view?usp=share_link" target="_blank" rel="noopener noreferrer" data-pdf-preview="https://drive.google.com/file/d/14z0TBRkitx2D9ZGLkFVB-by1NuSliMMs/preview" data-pdf-title="過往教學成果與回饋" aria-haspopup="dialog"><span class="hub-link-index">03</span><span class="hub-link-copy"><strong>過往教學成果與回饋</strong></span><span class="hub-link-arrow" aria-hidden="true">↗</span></a>
+                <a class="hub-link" href="https://drive.google.com/file/d/1M94ixkYF_MJHuXl4JZ-E3qe42Lbs6t8x/view?usp=share_link" target="_blank" rel="noopener noreferrer" data-pdf-preview="https://drive.google.com/file/d/1M94ixkYF_MJHuXl4JZ-E3qe42Lbs6t8x/preview" data-pdf-title="課程介紹" aria-haspopup="dialog"><span class="hub-link-index">04</span><span class="hub-link-copy"><strong>課程介紹</strong></span><span class="hub-link-arrow" aria-hidden="true">↗</span></a>
+                <a class="hub-link" href="https://drive.google.com/file/d/1MLbqBKMgGlajHJu48_N1xFo0ISlzCPtE/view?usp=drivesdk" target="_blank" rel="noopener noreferrer" data-pdf-preview="https://drive.google.com/file/d/1MLbqBKMgGlajHJu48_N1xFo0ISlzCPtE/preview" data-pdf-title="教學行事曆" aria-haspopup="dialog"><span class="hub-link-index">05</span><span class="hub-link-copy"><strong>教學行事曆</strong></span><span class="hub-link-arrow" aria-hidden="true">↗</span></a>
                 <a class="hub-link" href="https://line.me/ti/p/2rcgyFdA-b" target="_blank" rel="noopener noreferrer"><span class="hub-link-index">06</span><span class="hub-link-copy"><strong>教學試聽（私訊）</strong></span><span class="hub-link-arrow" aria-hidden="true">↗</span></a>
               </nav>
               <a class="hub-signup" href="https://line.me/ti/p/2rcgyFdA-b" target="_blank" rel="noopener noreferrer">
@@ -126,6 +126,25 @@
 
 
     </main>
+
+    <dialog class="pdf-modal" id="pdf-preview-modal" aria-labelledby="pdf-preview-title">
+      <div class="pdf-modal-shell">
+        <header class="pdf-modal-header">
+          <div>
+            <span class="pdf-modal-kicker">站內預覽</span>
+            <h2 id="pdf-preview-title">PDF 預覽</h2>
+          </div>
+          <button class="pdf-modal-close" type="button" data-pdf-close aria-label="關閉 PDF 預覽">×</button>
+        </header>
+        <div class="pdf-modal-body">
+          <iframe class="pdf-modal-frame" id="pdf-preview-frame" title="PDF 預覽" src="about:blank" loading="lazy"></iframe>
+        </div>
+        <footer class="pdf-modal-footer">
+          <p class="pdf-modal-note">若站內預覽沒有顯示，可改用 Google Drive 開啟。</p>
+          <a class="button button-primary pdf-modal-drive" id="pdf-preview-drive" href="#" target="_blank" rel="noopener noreferrer">另開 Google Drive <span aria-hidden="true">↗</span></a>
+        </footer>
+      </div>
+    </dialog>
 
     <footer class="site-footer">
       <div class="container footer-wrap">
@@ -204,6 +223,38 @@
         }, { rootMargin: "-45% 0px -45% 0px", threshold: 0 });
         pageSections.forEach((section) => sectionObserver.observe(section));
       }
+    </script>
+    <script>
+      const pdfModal = document.querySelector("#pdf-preview-modal");
+      const pdfFrame = document.querySelector("#pdf-preview-frame");
+      const pdfTitle = document.querySelector("#pdf-preview-title");
+      const pdfDriveLink = document.querySelector("#pdf-preview-drive");
+      const pdfCloseButton = document.querySelector("[data-pdf-close]");
+
+      const closePdfPreview = () => {
+        if (pdfModal?.open) pdfModal.close();
+      };
+
+      document.querySelectorAll("[data-pdf-preview]").forEach((link) => {
+        link.addEventListener("click", (event) => {
+          if (!pdfModal || typeof pdfModal.showModal !== "function") return;
+          event.preventDefault();
+          const title = link.dataset.pdfTitle || "PDF 預覽";
+          pdfTitle.textContent = title;
+          pdfFrame.title = `${title} PDF 預覽`;
+          pdfFrame.src = link.dataset.pdfPreview;
+          pdfDriveLink.href = link.href;
+          pdfModal.showModal();
+        });
+      });
+
+      pdfCloseButton?.addEventListener("click", closePdfPreview);
+      pdfModal?.addEventListener("click", (event) => {
+        if (event.target === pdfModal) closePdfPreview();
+      });
+      pdfModal?.addEventListener("close", () => {
+        pdfFrame.src = "about:blank";
+      });
     </script>
   </body>
 </html>
