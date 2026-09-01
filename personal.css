@@ -2546,9 +2546,9 @@ body[data-theme="dark"] .social-panel {
 
 
 /* Match the signup copy to the contact heading scale. */
-.link-hub > .hub-signup-copy,
-.link-hub > .hub-registration-copy strong,
-.link-hub > .hub-registration-copy span {
+.link-hub .hub-signup-copy,
+.link-hub .hub-registration-copy strong,
+.link-hub .hub-registration-copy span {
   font-size: clamp(1.9rem, 3.5vw, 2.8rem);
   line-height: 1.3;
 }
@@ -2561,7 +2561,7 @@ body[data-theme="dark"] .social-panel {
   align-content: center;
 }
 
-.link-hub > .hub-signup-copy {
+.link-hub > .hub-signup .hub-signup-copy {
   text-align: center;
 }
 
@@ -2571,8 +2571,9 @@ body[data-theme="dark"] .social-panel {
   text-align: center;
 }
 
-.link-hub > .hub-registration-copy {
+.link-hub > .hub-registration .hub-registration-copy {
   justify-items: center;
+  text-align: center;
 }
 
 @media (max-width: 760px) {
