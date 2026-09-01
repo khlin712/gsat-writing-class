@@ -2531,3 +2531,21 @@ body[data-theme="dark"] .social-panel {
     aspect-ratio: 210 / 297;
   }
 }
+
+
+/* Thin the mobile course-title outline. */
+@media (max-width: 760px) {
+  .hero h1 span {
+    -webkit-text-stroke: 0.5px rgba(0, 0, 0, 0.76);
+    text-shadow:
+      0.5px 0 0 rgba(0, 0, 0, 0.64),
+      -0.5px 0 0 rgba(0, 0, 0, 0.64),
+      0 0.5px 0 rgba(0, 0, 0, 0.64),
+      0 -0.5px 0 rgba(0, 0, 0, 0.64),
+      0.5px 0.5px 0 rgba(0, 0, 0, 0.56),
+      -0.5px -0.5px 0 rgba(0, 0, 0, 0.56),
+      0.5px -0.5px 0 rgba(0, 0, 0, 0.56),
+      -0.5px 0.5px 0 rgba(0, 0, 0, 0.56),
+      0 8px 18px rgba(0, 0, 0, 0.2);
+  }
+}
