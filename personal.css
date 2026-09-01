@@ -2102,12 +2102,6 @@ body[data-theme="dark"] .social-panel {
   line-height: 1.35;
 }
 
-.hub-signup-arrow {
-  color: #fff;
-  font-size: 1.55rem;
-  line-height: 1;
-}
-
 @media (max-width: 760px) {
   .hub-signup {
     grid-template-columns: minmax(0, 1fr) auto;
