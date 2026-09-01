@@ -2013,7 +2013,7 @@ body[data-theme="dark"] .social-panel {
 }
 
 .hero::after {
-  background: rgba(0, 0, 0, 0.3);
+  background: rgba(0, 0, 0, 0.5);
   animation: none;
   transform: none;
 }
