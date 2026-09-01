@@ -2718,3 +2718,62 @@ body[data-theme="dark"] .social-panel {
     padding: 28px clamp(36px, 3vw, 58px);
   }
 }
+
+
+/* Keep the two primary actions available while visitors browse on mobile. */
+.mobile-sticky-cta {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  body {
+    padding-bottom: calc(78px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-sticky-cta {
+    position: fixed;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 40;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    padding: 10px 14px calc(10px + env(safe-area-inset-bottom));
+    border-top: 1px solid rgba(183, 234, 146, 0.22);
+    background: rgba(17, 34, 33, 0.94);
+    box-shadow: 0 -10px 28px rgba(0, 0, 0, 0.2);
+    backdrop-filter: blur(16px);
+  }
+
+  .mobile-sticky-cta a {
+    display: flex;
+    min-height: 48px;
+    align-items: center;
+    justify-content: center;
+    padding: 0 12px;
+    border: 1px solid transparent;
+    border-radius: 14px;
+    font-size: 0.9rem;
+    font-weight: 900;
+    line-height: 1;
+    text-align: center;
+    transition: transform 180ms ease, filter 180ms ease;
+  }
+
+  .mobile-sticky-cta a:hover,
+  .mobile-sticky-cta a:focus-visible {
+    filter: brightness(1.08);
+    transform: translateY(-2px);
+  }
+
+  .mobile-sticky-cta-primary {
+    background: var(--accent);
+    color: var(--brand-deep);
+  }
+
+  .mobile-sticky-cta-secondary {
+    background: var(--mint);
+    color: var(--brand-deep);
+  }
+}
