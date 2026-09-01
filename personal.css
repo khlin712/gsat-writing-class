@@ -2484,3 +2484,50 @@ body[data-theme="dark"] .social-panel {
     height: 100%;
   }
 }
+
+
+/* Size the embedded PDF viewport to A4. */
+.pdf-modal {
+  width: min(94vw, 820px);
+  height: min(94vh, 1120px);
+  aspect-ratio: auto;
+}
+
+.pdf-modal-shell {
+  min-height: 0;
+  height: 100%;
+}
+
+.pdf-modal-body {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  overflow: auto;
+}
+
+.pdf-modal-frame {
+  flex: 0 0 auto;
+  width: 100%;
+  height: auto;
+  min-height: 0;
+  aspect-ratio: 210 / 297;
+}
+
+@media (max-width: 760px) {
+  .pdf-modal {
+    width: calc(100vw - 20px);
+    height: min(calc(100dvh - 20px), 1160px);
+    aspect-ratio: auto;
+  }
+
+  .pdf-modal-shell {
+    min-height: 0;
+    height: 100%;
+  }
+
+  .pdf-modal-frame {
+    width: 100%;
+    height: auto;
+    aspect-ratio: 210 / 297;
+  }
+}
