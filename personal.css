@@ -2149,18 +2149,6 @@ body[data-theme="dark"] .social-panel {
   font-size: clamp(1.35rem, 2.4vw, 2rem);
 }
 
-.hub-registration-status {
-  justify-self: start;
-  padding: 5px 10px;
-  border: 1px solid rgba(18, 55, 53, 0.24);
-  border-radius: 999px;
-  font-family: "Space Grotesk", "Noto Sans TC", sans-serif;
-  font-size: 0.68rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  line-height: 1.2;
-}
-
 @media (max-width: 760px) {
   .hub-registration {
     min-height: 126px;
@@ -2173,10 +2161,6 @@ body[data-theme="dark"] .social-panel {
 
   .hub-registration-copy span {
     font-size: 1.3rem;
-  }
-
-  .hub-registration-status {
-    font-size: 0.6rem;
   }
 }
 
@@ -2572,10 +2556,6 @@ body[data-theme="dark"] .social-panel {
 
 .link-hub > .hub-registration-copy {
   justify-items: center;
-}
-
-.link-hub > .hub-registration-status {
-  justify-self: center;
 }
 
 @media (max-width: 760px) {
