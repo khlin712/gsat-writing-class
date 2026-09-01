@@ -2598,3 +2598,107 @@ body[data-theme="dark"] .social-panel {
   }
 
 }
+
+
+/* Give wide desktop screens a proportionate reading width and scale. */
+@media (min-width: 1600px) {
+  :root {
+    --container: min(2400px, calc(100% - clamp(80px, 5vw, 160px)));
+    --cta-heading-size: clamp(2.2rem, 3.5vw, 3.6rem);
+    --cta-average-size: clamp(1.85rem, 2.825vw, 3rem);
+  }
+
+  .hero-copy {
+    max-width: 1600px;
+  }
+
+  .hero h1 {
+    max-width: 1500px;
+    font-size: clamp(4rem, 5.2vw, 7.2rem);
+  }
+
+  .section-heading-wide {
+    max-width: 1200px;
+  }
+
+  .section-heading h2 {
+    font-size: clamp(2.75rem, 5vw, 5rem);
+  }
+
+  .scroll-cue {
+    right: max(20px, calc((100vw - 2400px) / 2));
+  }
+
+  .link-hub {
+    gap: 28px;
+  }
+
+  .link-hub-main {
+    padding: clamp(36px, 3vw, 58px);
+  }
+
+  .link-hub-social {
+    padding: clamp(36px, 3vw, 54px);
+  }
+
+  .hub-link {
+    gap: 24px;
+    padding: 26px 0;
+  }
+
+  .hub-link-copy strong {
+    font-size: clamp(1.5rem, 2.15vw, 2.4rem);
+  }
+
+  .hub-link-arrow {
+    font-size: 1.9rem;
+  }
+
+  .hub-social-grid {
+    gap: 16px;
+    margin-top: 34px;
+  }
+
+  .hub-social {
+    min-height: 168px;
+    border-radius: 28px;
+  }
+
+  .hub-social-mark {
+    font-size: 2.1rem;
+  }
+
+  .hub-social-label {
+    font-size: 0.9rem;
+  }
+
+  .hub-classroom {
+    min-height: 110px;
+    gap: 18px;
+    padding: 20px 22px;
+  }
+
+  .hub-classroom-icon {
+    width: 52px;
+    height: 52px;
+    font-size: 1.5rem;
+  }
+
+  .hub-classroom-copy strong {
+    font-size: clamp(1.15rem, 2.1vw, 1.65rem);
+  }
+
+  .hub-classroom-copy small {
+    font-size: 0.8rem;
+  }
+
+  .hub-classroom-arrow {
+    font-size: 1.8rem;
+  }
+
+  .link-hub > .hub-signup,
+  .link-hub > .hub-registration {
+    min-height: 176px;
+    padding: 28px clamp(36px, 3vw, 58px);
+  }
+}
