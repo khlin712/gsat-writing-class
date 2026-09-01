@@ -2549,3 +2549,10 @@ body[data-theme="dark"] .social-panel {
       0 8px 18px rgba(0, 0, 0, 0.2);
   }
 }
+
+
+/* Let the signup cards span the full link hub. */
+.link-hub > .hub-signup,
+.link-hub > .hub-registration {
+  grid-column: 1 / -1;
+}
