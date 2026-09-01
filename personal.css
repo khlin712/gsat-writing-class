@@ -2023,7 +2023,13 @@ body[data-theme="dark"] .social-panel {
 }
 
 .hero h1 {
+  display: inline-block;
   max-width: 1180px;
+  padding: clamp(18px, 2.3vw, 30px) clamp(22px, 3.4vw, 46px);
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 18px;
+  background: rgba(0, 0, 0, 0.62);
+  box-shadow: 0 20px 48px rgba(0, 0, 0, 0.28);
   font-size: clamp(3.3rem, 6vw, 6rem);
   line-height: 1.22;
 }
@@ -2183,5 +2189,13 @@ body[data-theme="dark"] .social-panel {
 
   .hub-registration-status {
     font-size: 0.6rem;
+  }
+}
+
+/* Keep the title box compact on small screens. */
+@media (max-width: 760px) {
+  .hero h1 {
+    padding: 15px 16px;
+    border-radius: 14px;
   }
 }
