@@ -2115,10 +2115,11 @@ body[data-theme="dark"] .social-panel {
   }
 }
 
-/* Future-course registration card; link will be added when the form URL is ready. */
+/* Future-course registration card. */
 .hub-registration {
   display: grid;
   gap: 12px;
+  align-content: center;
   min-height: 148px;
   padding: 24px clamp(26px, 4vw, 48px);
   border: 1px solid rgba(183, 234, 146, 0.55);
@@ -2554,21 +2555,18 @@ body[data-theme="dark"] .social-panel {
 
 /* Center copy in the full-width signup cards. */
 .link-hub > .hub-signup {
-  position: relative;
   grid-template-columns: 1fr;
+  justify-items: center;
+  align-content: center;
 }
 
 .link-hub > .hub-signup-copy {
   text-align: center;
 }
 
-.link-hub > .hub-signup-arrow {
-  position: absolute;
-  right: clamp(26px, 4vw, 48px);
-}
-
 .link-hub > .hub-registration {
   justify-items: center;
+  align-content: center;
   text-align: center;
 }
 
@@ -2585,7 +2583,4 @@ body[data-theme="dark"] .social-panel {
     grid-template-columns: 1fr;
   }
 
-  .link-hub > .hub-signup-arrow {
-    right: 20px;
-  }
 }
