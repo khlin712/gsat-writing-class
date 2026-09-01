@@ -162,14 +162,17 @@ button {
 }
 
 .brand-copy {
-  display: grid;
-  gap: 0;
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
   line-height: 1.1;
+  white-space: nowrap;
 }
 
 .brand-copy strong {
   font-size: 0.98rem;
-  letter-spacing: 0.08em;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .brand-copy small {
@@ -1366,6 +1369,15 @@ body[data-theme="dark"] .social-panel {
 @media (max-width: 760px) {
   :root {
     --container: min(100% - 28px, 620px);
+  }
+
+  .brand {
+    gap: 8px;
+  }
+
+  .brand-copy strong {
+    font-size: clamp(0.62rem, 3.45vw, 0.98rem);
+    letter-spacing: 0.01em;
   }
 
   .nav-wrap {
