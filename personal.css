@@ -2537,6 +2537,14 @@ body[data-theme="dark"] .social-panel {
 }
 
 
+/* Keep both full-width CTA cards the same size. */
+.link-hub > .hub-signup,
+.link-hub > .hub-registration {
+  min-height: 148px;
+  padding: 24px clamp(26px, 4vw, 48px);
+}
+
+
 /* Center copy in the full-width signup cards. */
 .link-hub > .hub-signup {
   grid-template-columns: 1fr;
@@ -2559,6 +2567,12 @@ body[data-theme="dark"] .social-panel {
 }
 
 @media (max-width: 760px) {
+  .link-hub > .hub-signup,
+  .link-hub > .hub-registration {
+    min-height: 126px;
+    padding: 20px;
+  }
+
   .link-hub > .hub-signup {
     grid-template-columns: 1fr;
   }
