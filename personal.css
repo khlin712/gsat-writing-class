@@ -1694,6 +1694,22 @@ body[data-theme="dark"] .social-panel {
   .link-hub {
     grid-template-columns: 1fr;
   }
+
+  .link-hub-column {
+    order: 1;
+  }
+
+  .link-hub > .hub-signup {
+    order: 2;
+  }
+
+  .link-hub > .hub-registration {
+    order: 3;
+  }
+
+  .link-hub-social {
+    order: 4;
+  }
 }
 
 @media (max-width: 760px) {
