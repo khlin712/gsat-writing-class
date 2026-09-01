@@ -23,6 +23,12 @@
   color-scheme: light;
 }
 
+@media (max-width: 420px) {
+  :root {
+    --cta-heading-size: clamp(1.3rem, 7.5vw, 1.9rem);
+  }
+}
+
 body[data-theme="dark"] {
   --paper: #112221;
   --surface: #19312f;
@@ -2553,6 +2559,7 @@ body[data-theme="dark"] .social-panel {
 .link-hub .hub-registration-copy span {
   font-size: var(--cta-heading-size);
   line-height: 1.3;
+  white-space: nowrap;
 }
 
 
