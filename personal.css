@@ -2461,3 +2461,33 @@ body[data-theme="dark"] .social-panel {
     min-height: min(94vh, 1100px);
   }
 }
+
+
+/* Match the modal to the A4 portrait ratio. */
+.pdf-modal {
+  width: min(94vw, 820px, 66.6667vh);
+  height: auto;
+  aspect-ratio: 210 / 297;
+}
+
+.pdf-modal-shell {
+  min-height: 0;
+  height: 100%;
+}
+
+.pdf-modal-frame {
+  min-height: 0;
+}
+
+@media (max-width: 760px) {
+  .pdf-modal {
+    width: min(calc(100vw - 20px), 66.6667vh);
+    height: auto;
+    aspect-ratio: 210 / 297;
+  }
+
+  .pdf-modal-shell {
+    min-height: 0;
+    height: 100%;
+  }
+}
