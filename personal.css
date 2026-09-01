@@ -2448,3 +2448,16 @@ body[data-theme="dark"] .social-panel {
     -webkit-text-stroke-width: 0.9px;
   }
 }
+
+
+/* Give the PDF viewer a portrait reading shape on larger screens. */
+@media (min-width: 761px) {
+  .pdf-modal {
+    width: min(90vw, 820px, 74vh);
+    height: min(94vh, 1100px);
+  }
+
+  .pdf-modal-shell {
+    min-height: min(94vh, 1100px);
+  }
+}
