@@ -2718,3 +2718,23 @@ body[data-theme="dark"] .social-panel {
     padding: 28px clamp(36px, 3vw, 58px);
   }
 }
+
+
+/* Preserve the complete hero photo on desktop while keeping the mobile crop unchanged. */
+@media (min-width: 761px) {
+  .hero::before {
+    background-position: center;
+    background-size: cover;
+    filter: blur(18px) saturate(0.82) contrast(1.03);
+    transform: scale(1.06);
+  }
+
+  .hero-backdrop {
+    background-image:
+      linear-gradient(rgba(0, 0, 0, 0.5), rgba(0, 0, 0, 0.5)),
+      url("images/ntulib-night-browser.jpg");
+    background-position: center, center;
+    background-size: cover, contain;
+    background-repeat: no-repeat;
+  }
+}
