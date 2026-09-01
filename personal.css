@@ -2399,3 +2399,52 @@ body[data-theme="dark"] .social-panel {
     letter-spacing: -0.025em;
   }
 }
+
+
+/* Use a stroke around the title glyphs instead of an enclosing box. */
+.hero h1 {
+  display: block;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  -webkit-text-stroke: 1.4px rgba(0, 0, 0, 0.9);
+  paint-order: stroke fill;
+  text-shadow:
+    1px 0 0 rgba(0, 0, 0, 0.82),
+    -1px 0 0 rgba(0, 0, 0, 0.82),
+    0 1px 0 rgba(0, 0, 0, 0.82),
+    0 -1px 0 rgba(0, 0, 0, 0.82),
+    1px 1px 0 rgba(0, 0, 0, 0.72),
+    -1px -1px 0 rgba(0, 0, 0, 0.72),
+    1px -1px 0 rgba(0, 0, 0, 0.72),
+    -1px 1px 0 rgba(0, 0, 0, 0.72),
+    0 18px 42px rgba(0, 0, 0, 0.28);
+}
+
+.hero h1 span {
+  -webkit-text-stroke: 1.2px rgba(0, 0, 0, 0.9);
+  text-shadow:
+    1px 0 0 rgba(0, 0, 0, 0.82),
+    -1px 0 0 rgba(0, 0, 0, 0.82),
+    0 1px 0 rgba(0, 0, 0, 0.82),
+    0 -1px 0 rgba(0, 0, 0, 0.82),
+    1px 1px 0 rgba(0, 0, 0, 0.72),
+    -1px -1px 0 rgba(0, 0, 0, 0.72),
+    1px -1px 0 rgba(0, 0, 0, 0.72),
+    -1px 1px 0 rgba(0, 0, 0, 0.72),
+    0 12px 28px rgba(0, 0, 0, 0.24);
+}
+
+@media (max-width: 760px) {
+  .hero h1 {
+    padding: 0;
+    border-radius: 0;
+    -webkit-text-stroke-width: 1px;
+  }
+
+  .hero h1 span {
+    -webkit-text-stroke-width: 0.9px;
+  }
+}
