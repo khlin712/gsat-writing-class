@@ -2829,3 +2829,23 @@ body[data-theme="dark"] .social-panel {
     gap: 12px;
   }
 }
+
+
+/* Add a quiet paper-grid texture without extra image requests. */
+body::before {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  background-image:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+    linear-gradient(rgba(255, 255, 255, 0.028) 1px, transparent 1px),
+    radial-gradient(circle at 16% 14%, rgba(239, 170, 83, 0.1), transparent 24%),
+    radial-gradient(circle at 82% 76%, rgba(183, 234, 146, 0.08), transparent 28%);
+  background-position: center;
+  background-size: 72px 72px, 72px 72px, 100% 100%, 100% 100%;
+  background-repeat: repeat, repeat, no-repeat, no-repeat;
+  content: "";
+  mix-blend-mode: screen;
+  opacity: 0.8;
+}
