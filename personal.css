@@ -2556,3 +2556,42 @@ body[data-theme="dark"] .social-panel {
 .link-hub > .hub-registration {
   grid-column: 1 / -1;
 }
+
+
+/* Center copy in the full-width signup cards. */
+.link-hub > .hub-signup {
+  position: relative;
+  grid-template-columns: 1fr;
+}
+
+.link-hub > .hub-signup-copy {
+  text-align: center;
+}
+
+.link-hub > .hub-signup-arrow {
+  position: absolute;
+  right: clamp(26px, 4vw, 48px);
+}
+
+.link-hub > .hub-registration {
+  justify-items: center;
+  text-align: center;
+}
+
+.link-hub > .hub-registration-copy {
+  justify-items: center;
+}
+
+.link-hub > .hub-registration-status {
+  justify-self: center;
+}
+
+@media (max-width: 760px) {
+  .link-hub > .hub-signup {
+    grid-template-columns: 1fr;
+  }
+
+  .link-hub > .hub-signup-arrow {
+    right: 20px;
+  }
+}
