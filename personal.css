@@ -1537,7 +1537,7 @@ body[data-theme="dark"] .social-panel {
 
 .hub-link {
   display: grid;
-  grid-template-columns: 44px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
   gap: 18px;
   padding: 20px 0;
@@ -1558,13 +1558,6 @@ body[data-theme="dark"] .social-panel {
 .hub-link:focus-visible {
   padding-left: 8px;
   color: var(--mint);
-}
-
-.hub-link-index {
-  color: var(--accent);
-  font-family: "Space Grotesk", sans-serif;
-  font-size: 0.8rem;
-  font-weight: 700;
 }
 
 .hub-link-copy {
@@ -1696,7 +1689,7 @@ body[data-theme="dark"] .social-panel {
 
 @media (max-width: 760px) {
   .hub-link {
-    grid-template-columns: 34px minmax(0, 1fr) auto;
+    grid-template-columns: minmax(0, 1fr) auto;
     gap: 12px;
     padding: 18px 0;
   }
