@@ -2865,3 +2865,16 @@ body::before {
     height: min(94vh, 1420px);
   }
 }
+
+
+/* Keep the LINE contact tile consistently green with white lettering. */
+.hub-social-line {
+  background: #06c755;
+  color: #fff;
+}
+
+.hub-social-line .hub-social-mark {
+  background: transparent;
+  color: #fff;
+  -webkit-text-fill-color: #fff;
+}
