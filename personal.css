@@ -2849,3 +2849,10 @@ body::before {
   mix-blend-mode: screen;
   opacity: 0.8;
 }
+
+/* Give the desktop hero title more presence while preserving mobile sizing. */
+@media (min-width: 761px) {
+  .hero h1 {
+    font-size: clamp(3.4rem, 6.8vw, 7rem);
+  }
+}
