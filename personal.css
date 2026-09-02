@@ -2856,3 +2856,12 @@ body::before {
     font-size: clamp(3.4rem, 6.8vw, 7rem);
   }
 }
+
+
+/* Enlarge the desktop PDF preview for comfortable Safari reading. */
+@media (min-width: 761px) {
+  .pdf-modal {
+    width: min(94vw, 1180px);
+    height: min(94vh, 1420px);
+  }
+}
