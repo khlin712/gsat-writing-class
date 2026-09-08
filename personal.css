@@ -2878,3 +2878,41 @@ body::before {
   color: #fff;
   -webkit-text-fill-color: #fff;
 }
+
+/* Limit desktop reading width and balance course links with contact options. */
+@media (min-width: 861px) {
+  .links-section > .container {
+    width: min(1440px, calc(100% - 64px));
+  }
+
+  .link-hub {
+    grid-template-columns: minmax(0, 55fr) minmax(0, 45fr);
+    gap: 24px;
+  }
+
+  .link-hub-main,
+  .link-hub-social {
+    padding: 30px;
+  }
+
+  .hub-link,
+  .hub-link:first-child,
+  .hub-link:last-child {
+    min-height: 84px;
+    padding: 18px 0;
+    gap: 16px;
+  }
+
+  .hub-link-copy strong {
+    font-size: clamp(26px, 2vw, 30px);
+  }
+
+  .hub-social-grid {
+    margin-top: 24px;
+    gap: 14px;
+  }
+
+  .hub-social {
+    min-height: 132px;
+  }
+}
