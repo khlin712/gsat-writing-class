@@ -6,11 +6,16 @@
   <meta name="theme-color" content="#111827">
   <meta name="description" content="國寫作文專用掃描器：自動拉正、文字增強、壓縮並輸出規範命名 PDF。">
   <title>作文 PDF Scanner</title>
-  <link rel="stylesheet" href="./style.css?v=20260929-5">
+  <link rel="stylesheet" href="./style.css?v=20260929-6">
   <script>
     if ("serviceWorker" in navigator) {
+      const scannerScope = new URL("./", location.href).href;
       navigator.serviceWorker.getRegistrations()
-        .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
+        .then(registrations => Promise.all(
+          registrations
+            .filter(registration => registration.scope.startsWith(scannerScope))
+            .map(registration => registration.unregister())
+        ))
         .catch(() => {});
     }
     if ("caches" in window) {
@@ -19,7 +24,7 @@
         .catch(() => {});
     }
   </script>
-  <script defer src="./app.js?v=20260929-5"></script>
+  <script defer src="./app.js?v=20260929-6"></script>
 </head>
 <body>
   <main class="app">
@@ -45,7 +50,7 @@
       <input id="galleryInput" class="visually-hidden" type="file" accept="image/*" multiple>
 
       <div class="privacy-note">所有影像處理都在你的裝置上完成，原始作文不會上傳到本站。</div>
-      <div id="engineStatus" class="status">準備完成。選擇照片後會自動開始掃描。</div>
+      <div id="engineStatus" class="status">掃描引擎背景準備中，你可以先選擇照片。</div>
       <div id="pages" class="pages" aria-live="polite">
         <div class="empty">尚未加入作文頁面</div>
       </div>
