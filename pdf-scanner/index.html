@@ -6,30 +6,20 @@
   <meta name="theme-color" content="#111827">
   <meta name="description" content="國寫作文專用掃描器：自動拉正、文字增強、壓縮並輸出規範命名 PDF。">
   <title>作文 PDF Scanner</title>
-  <link rel="stylesheet" href="./style.css?v=20260929-4">
-  <script>
-    window.Module = {
-      onRuntimeInitialized() {
-        window.dispatchEvent(new Event("opencv-ready"));
-      }
-    };
-  </script>
-  <script defer src="https://docs.opencv.org/4.x/opencv.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/jscanify@1.4.3/src/jscanify.js"></script>
-  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <link rel="stylesheet" href="./style.css?v=20260929-5">
   <script>
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.getRegistrations()
-        .then(rs => Promise.all(rs.map(r => r.unregister())))
+        .then(registrations => Promise.all(registrations.map(registration => registration.unregister())))
         .catch(() => {});
     }
     if ("caches" in window) {
       caches.keys()
-        .then(keys => Promise.all(keys.filter(k => k.startsWith("gsat-pdf-scanner")).map(k => caches.delete(k))))
+        .then(keys => Promise.all(keys.filter(key => key.startsWith("gsat-pdf-scanner")).map(key => caches.delete(key))))
         .catch(() => {});
     }
   </script>
-  <script defer src="./app.js?v=20260929-4"></script>
+  <script defer src="./app.js?v=20260929-5"></script>
 </head>
 <body>
   <main class="app">
@@ -55,7 +45,7 @@
       <input id="galleryInput" class="visually-hidden" type="file" accept="image/*" multiple>
 
       <div class="privacy-note">所有影像處理都在你的裝置上完成，原始作文不會上傳到本站。</div>
-      <div id="engineStatus" class="status">正在載入掃描引擎…</div>
+      <div id="engineStatus" class="status">準備完成。選擇照片後會自動開始掃描。</div>
       <div id="pages" class="pages" aria-live="polite">
         <div class="empty">尚未加入作文頁面</div>
       </div>
