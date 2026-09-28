@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#111827">
+  <meta name="description" content="國寫作文專用掃描器：自動拉正、文字增強、壓縮並輸出規範命名 PDF。">
+  <title>作文 PDF Scanner</title>
+  <link rel="manifest" href="./manifest.webmanifest">
+  <link rel="stylesheet" href="./style.css">
+  <script>
+    window.Module = {
+      onRuntimeInitialized() {
+        window.dispatchEvent(new Event("opencv-ready"));
+      }
+    };
+  </script>
+  <script defer src="https://docs.opencv.org/4.x/opencv.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jscanify@1.4.3/src/jscanify.js"></script>
+  <script defer src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <main class="app">
+    <header class="hero">
+      <p class="eyebrow">國寫作文專用</p>
+      <h1>作文 PDF Scanner</h1>
+      <p>把歪斜、陰影重、檔案過大的作文照片，整理成方向正確、文字清楚、檔名一致的 PDF。</p>
+    </header>
+
+    <section class="card" aria-labelledby="scan-title">
+      <div class="step-title" id="scan-title"><span>1</span>掃描作文</div>
+      <div class="scan-buttons">
+        <label class="scan-button" for="cameraInput">
+          <strong>📷 拍一頁</strong>
+          <small>每頁分開拍，盡量讓紙張四邊完整入鏡</small>
+        </label>
+        <label class="scan-button" for="galleryInput">
+          <strong>🖼️ 從相簿加入</strong>
+          <small>可一次選多張照片，之後再調整順序</small>
+        </label>
+      </div>
+      <input id="cameraInput" class="visually-hidden" type="file" accept="image/*" capture="environment">
+      <input id="galleryInput" class="visually-hidden" type="file" accept="image/*" multiple>
+
+      <div class="privacy-note">所有影像處理都在你的裝置上完成，原始作文不會上傳到本站。</div>
+      <div id="engineStatus" class="status">正在載入掃描引擎…</div>
+      <div id="pages" class="pages" aria-live="polite">
+        <div class="empty">尚未加入作文頁面</div>
+      </div>
+    </section>
+
+    <section class="card" aria-labelledby="info-title">
+      <div class="step-title" id="info-title"><span>2</span>填寫交件資料</div>
+      <div class="form-grid">
+        <label>班級
+          <input id="className" inputmode="numeric" autocomplete="off" maxlength="8" placeholder="例如 116">
+        </label>
+        <label>座號
+          <input id="seatNo" inputmode="numeric" autocomplete="off" maxlength="3" placeholder="例如 1">
+        </label>
+        <label>姓名
+          <input id="studentName" autocomplete="name" maxlength="24" placeholder="例如 張沛芸">
+        </label>
+        <label>題目
+          <input id="essayTitle" autocomplete="off" maxlength="40" placeholder="例如 通關密語">
+        </label>
+        <label>第幾練
+          <select id="practice">
+            <option value="">請選擇</option>
+            <option>一</option><option>二</option><option>三</option><option>四</option><option>五</option>
+            <option>六</option><option>七</option><option>八</option><option>九</option><option>十</option>
+            <option>十一</option><option>十二</option><option>十三</option><option>十四</option><option>十五</option>
+            <option>十六</option><option>十七</option><option>十八</option><option>十九</option><option>二十</option>
+          </select>
+        </label>
+      </div>
+      <div class="filename">檔名預覽：<strong id="filenamePreview">請完整填寫資料</strong></div>
+    </section>
+
+    <section class="card" aria-labelledby="export-title">
+      <div class="step-title" id="export-title"><span>3</span>輸出 PDF</div>
+      <button id="exportBtn" class="primary" disabled>產生並下載 PDF</button>
+      <div id="exportStatus" class="status"></div>
+      <p class="only-pdf">只輸出 PDF，不提供 JPG／PNG。</p>
+    </section>
+  </main>
+
+  <dialog id="cropDialog" class="crop-dialog">
+    <form method="dialog" class="crop-panel">
+      <div class="crop-head">
+        <div>
+          <strong>調整紙張四角</strong>
+          <small>把四個圓點拖到作文紙的四個角</small>
+        </div>
+        <button value="cancel" class="icon-button" aria-label="關閉">✕</button>
+      </div>
+      <div class="canvas-wrap">
+        <canvas id="cropCanvas" aria-label="紙張四角調整區"></canvas>
+      </div>
+      <div class="crop-actions">
+        <button id="redetectBtn" type="button">重新自動偵測</button>
+        <span class="spacer"></span>
+        <button value="cancel">取消</button>
+        <button id="saveCropBtn" type="button" class="primary-inline">套用裁切</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>
