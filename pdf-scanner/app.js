@@ -342,12 +342,20 @@ async function processPage(page, {detect = false} = {}) {
 }
 
 async function addFiles(fileList) {
-  if (!state.cvReady) {
-    setEngineStatus("掃描引擎仍在載入，請稍候。", "warn");
+  const files = [...fileList].filter(file => !file.type || file.type.startsWith("image/"));
+  if (!files.length) {
+    setEngineStatus("沒有可讀取的圖片。", "warn");
     return;
   }
 
-  const files = [...fileList].filter(file => file.type.startsWith("image/"));
+  if (!state.cvReady) {
+    setEngineStatus(`已收到 ${files.length} 張照片，正在載入掃描引擎…`, "warn");
+    await ensureScannerReady();
+    if (!state.cvReady) {
+      setEngineStatus("掃描引擎載入失敗，請重新整理頁面後再試。", "bad");
+      return;
+    }
+  }
   const available = Math.max(0, MAX_PAGES - state.pages.length);
   const accepted = files.slice(0, available);
 
@@ -362,7 +370,9 @@ async function addFiles(fileList) {
     setEngineStatus(`正在處理 ${accepted.length} 頁…`);
   }
 
-  for (const file of accepted) {
+  for (let i = 0; i < accepted.length; i++) {
+    const file = accepted[i];
+    setEngineStatus(`正在掃描第 ${i + 1} / ${accepted.length} 頁…`);
     const page = {
       id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
       file,
@@ -687,6 +697,11 @@ function runSelfChecks() {
 }
 runSelfChecks();
 
-if ("serviceWorker" in navigator && location.protocol === "https:") {
-  navigator.serviceWorker.register("./sw.js").catch(() => {});
-}
+window.addEventListener("error", event => {
+  console.error(event.error || event.message);
+  setEngineStatus("掃描程式發生錯誤，請重新整理後再試。", "bad");
+});
+window.addEventListener("unhandledrejection", event => {
+  console.error(event.reason);
+  setEngineStatus("掃描處理失敗，請重新整理後再試。", "bad");
+});
