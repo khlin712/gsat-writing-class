@@ -175,7 +175,10 @@ function startWorker() {
       console.error("Scanner worker init:", message.error);
       state.workerReady = false;
       state.cvReady = false;
-      setEngineStatus("掃描引擎載入失敗，請確認網路後重新整理。", "bad");
+      state.enginePromise = null;
+      try { worker.terminate(); } catch (_) {}
+      if (state.worker === worker) state.worker = null;
+      setEngineStatus("掃描引擎載入失敗，請確認網路後再試一次。", "bad");
       return;
     }
 
@@ -192,12 +195,15 @@ function startWorker() {
     console.error("Scanner worker error:", error);
     state.workerReady = false;
     state.cvReady = false;
+    state.enginePromise = null;
     for (const pending of state.workerPending.values()) {
       clearTimeout(pending.timer);
       pending.reject(new Error("掃描引擎發生錯誤"));
     }
     state.workerPending.clear();
-    setEngineStatus("掃描引擎發生錯誤，請重新整理後再試。", "bad");
+    try { worker.terminate(); } catch (_) {}
+    if (state.worker === worker) state.worker = null;
+    setEngineStatus("掃描引擎發生錯誤，請再試一次。", "bad");
   });
 
   return worker;
