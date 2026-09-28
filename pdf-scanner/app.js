@@ -2,16 +2,17 @@ const $ = selector => document.querySelector(selector);
 
 const MAX_PAGES = 12;
 const SOURCE_MAX_EDGE = 2200;
-const ANALYSIS_MAX_EDGE = 1000;
 const JPEG_QUALITY_ENHANCED = 0.80;
 const JPEG_QUALITY_ORIGINAL = 0.84;
-const OPENCV_URL = "https://docs.opencv.org/4.10.0/opencv.js";
-const JSCANIFY_URL = "https://cdn.jsdelivr.net/npm/jscanify@1.4.3/src/jscanify.js";
 const JSPDF_URL = "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js";
+const WORKER_URL = "./scan-worker.js?v=20260929-2";
 
 const state = {
   cvReady: false,
-  scanner: null,
+  worker: null,
+  workerReady: false,
+  workerSeq: 0,
+  workerPending: new Map(),
   pages: [],
   processing: 0,
   editorPageId: null,
@@ -153,36 +154,123 @@ function loadScript(src, readyTest, timeoutMs = 45000) {
   });
 }
 
+function startWorker() {
+  if (state.worker) return state.worker;
+
+  const worker = new Worker(WORKER_URL);
+  state.worker = worker;
+
+  worker.addEventListener("message", event => {
+    const message = event.data || {};
+
+    if (message.type === "ready") {
+      state.workerReady = true;
+      state.cvReady = true;
+      setEngineStatus("掃描引擎已就緒", "ok");
+      updateExportState();
+      return;
+    }
+
+    if (message.type === "init-error") {
+      console.error("Scanner worker init:", message.error);
+      state.workerReady = false;
+      state.cvReady = false;
+      setEngineStatus("掃描引擎載入失敗，請確認網路後重新整理。", "bad");
+      return;
+    }
+
+    const pending = state.workerPending.get(message.id);
+    if (!pending) return;
+    state.workerPending.delete(message.id);
+    clearTimeout(pending.timer);
+
+    if (message.ok) pending.resolve(message.result);
+    else pending.reject(new Error(message.error || "掃描處理失敗"));
+  });
+
+  worker.addEventListener("error", error => {
+    console.error("Scanner worker error:", error);
+    state.workerReady = false;
+    state.cvReady = false;
+    for (const pending of state.workerPending.values()) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error("掃描引擎發生錯誤"));
+    }
+    state.workerPending.clear();
+    setEngineStatus("掃描引擎發生錯誤，請重新整理後再試。", "bad");
+  });
+
+  return worker;
+}
+
 async function ensureScannerReady() {
-  if (state.cvReady && state.scanner) return true;
+  if (state.workerReady && state.worker) return true;
   if (state.enginePromise) return state.enginePromise;
 
-  state.enginePromise = (async () => {
-    setEngineStatus("正在載入掃描引擎，第一次使用可能需要數秒…");
+  state.enginePromise = new Promise(resolve => {
+    setEngineStatus("掃描引擎正在背景準備，網頁仍可正常操作…");
+    const worker = startWorker();
 
-    await loadScript(OPENCV_URL, () => Boolean(window.cv));
-    if (window.cv && typeof window.cv.then === "function") {
-      window.cv = await window.cv;
-    }
-    await waitFor(() => Boolean(window.cv?.Mat), 30000);
+    const timeout = setTimeout(() => {
+      if (state.workerReady) return;
+      state.enginePromise = null;
+      setEngineStatus("掃描引擎準備時間較久，請再試一次。", "warn");
+      resolve(false);
+    }, 60000);
 
-    await loadScript(JSCANIFY_URL, () => Boolean(window.jscanify));
-    await waitFor(() => Boolean(window.jscanify), 10000);
-
-    state.scanner = new window.jscanify();
-    state.cvReady = true;
-    setEngineStatus("掃描引擎已就緒", "ok");
-    updateExportState();
-    return true;
-  })().catch(error => {
-    console.error(error);
-    state.enginePromise = null;
-    state.cvReady = false;
-    setEngineStatus("掃描引擎載入失敗。請確認網路後再試一次。", "bad");
-    return false;
+    const onMessage = event => {
+      if (event.data?.type === "ready") {
+        clearTimeout(timeout);
+        worker.removeEventListener("message", onMessage);
+        resolve(true);
+      }
+      if (event.data?.type === "init-error") {
+        clearTimeout(timeout);
+        worker.removeEventListener("message", onMessage);
+        state.enginePromise = null;
+        resolve(false);
+      }
+    };
+    worker.addEventListener("message", onMessage);
   });
 
   return state.enginePromise;
+}
+
+function workerRequest(action, payload, transfer = [], timeoutMs = 45000) {
+  const worker = startWorker();
+  const id = ++state.workerSeq;
+
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      state.workerPending.delete(id);
+      reject(new Error("掃描處理逾時，請重試這一頁"));
+    }, timeoutMs);
+
+    state.workerPending.set(id, {resolve, reject, timer});
+    worker.postMessage({id, action, payload}, transfer);
+  });
+}
+
+function canvasWorkerPayload(canvas) {
+  const imageData = canvas.getContext("2d").getImageData(0, 0, canvas.width, canvas.height);
+  return {
+    payload: {
+      width: canvas.width,
+      height: canvas.height,
+      buffer: imageData.data.buffer
+    },
+    transfer: [imageData.data.buffer]
+  };
+}
+
+function workerImageToCanvas(result) {
+  const canvas = document.createElement("canvas");
+  canvas.width = result.width;
+  canvas.height = result.height;
+  const imageData = new ImageData(new Uint8ClampedArray(result.buffer), result.width, result.height);
+  canvas.getContext("2d").putImageData(imageData, 0, 0);
+  return canvas;
 }
 
 async function ensurePdfReady() {
@@ -201,7 +289,8 @@ async function ensurePdfReady() {
   return state.pdfPromise;
 }
 
-setEngineStatus("準備完成。選擇照片後會自動開始掃描。", "ok");
+setEngineStatus("掃描引擎背景準備中，你可以先選擇照片。", "ok");
+setTimeout(() => { ensureScannerReady(); }, 50);
 
 async function loadFileToCanvas(file, maxEdge = SOURCE_MAX_EDGE) {
   const url = URL.createObjectURL(file);
@@ -230,15 +319,6 @@ async function loadFileToCanvas(file, maxEdge = SOURCE_MAX_EDGE) {
   } finally {
     URL.revokeObjectURL(url);
   }
-}
-
-function scaledCanvas(source, maxEdge) {
-  const scale = Math.min(1, maxEdge / Math.max(source.width, source.height));
-  const canvas = document.createElement("canvas");
-  canvas.width = Math.max(1, Math.round(source.width * scale));
-  canvas.height = Math.max(1, Math.round(source.height * scale));
-  canvas.getContext("2d", {alpha: false}).drawImage(source, 0, 0, canvas.width, canvas.height);
-  return {canvas, scale};
 }
 
 function defaultCorners(width, height) {
@@ -275,108 +355,6 @@ function validCorners(corners, width, height) {
   return polygonArea(corners) >= width * height * 0.12;
 }
 
-function blurScore(canvas) {
-  const cv = window.cv;
-  const {canvas: analysis} = scaledCanvas(canvas, ANALYSIS_MAX_EDGE);
-  const src = cv.imread(analysis);
-  const gray = new cv.Mat();
-  const lap = new cv.Mat();
-  const mean = new cv.Mat();
-  const stddev = new cv.Mat();
-  try {
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-    cv.Laplacian(gray, lap, cv.CV_32F);
-    cv.meanStdDev(lap, mean, stddev);
-    const sigma = stddev.data64F?.[0] ?? stddev.data32F?.[0] ?? 0;
-    return sigma * sigma;
-  } catch (error) {
-    console.warn("Blur check skipped:", error);
-    return null;
-  } finally {
-    src.delete(); gray.delete(); lap.delete(); mean.delete(); stddev.delete();
-  }
-}
-
-function detectCorners(source) {
-  const cv = window.cv;
-  const {canvas: analysis, scale} = scaledCanvas(source, ANALYSIS_MAX_EDGE);
-  const mat = cv.imread(analysis);
-  let contour = null;
-  try {
-    contour = state.scanner.findPaperContour(mat);
-    if (!contour) return null;
-    const detected = state.scanner.getCornerPoints(contour);
-    if (!detected || Object.values(detected).some(point => !point)) return null;
-
-    const corners = {};
-    for (const [key, point] of Object.entries(detected)) {
-      corners[key] = {x: point.x / scale, y: point.y / scale};
-    }
-    return validCorners(corners, source.width, source.height) ? corners : null;
-  } finally {
-    if (contour?.delete) contour.delete();
-    mat.delete();
-  }
-}
-
-function outputDimensions(corners) {
-  const w = Math.max(
-    distance(corners.topLeftCorner, corners.topRightCorner),
-    distance(corners.bottomLeftCorner, corners.bottomRightCorner)
-  );
-  const h = Math.max(
-    distance(corners.topLeftCorner, corners.bottomLeftCorner),
-    distance(corners.topRightCorner, corners.bottomRightCorner)
-  );
-  const safeW = Math.max(400, w);
-  const safeH = Math.max(400, h);
-  const scale = Math.min(1, SOURCE_MAX_EDGE / Math.max(safeW, safeH));
-  return {
-    width: Math.max(400, Math.round(safeW * scale)),
-    height: Math.max(400, Math.round(safeH * scale))
-  };
-}
-
-function rotateCanvas(source, degrees) {
-  const turns = ((degrees % 360) + 360) % 360;
-  if (!turns) return source;
-
-  const swap = turns === 90 || turns === 270;
-  const canvas = document.createElement("canvas");
-  canvas.width = swap ? source.height : source.width;
-  canvas.height = swap ? source.width : source.height;
-  const ctx = canvas.getContext("2d", {alpha: false});
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.translate(canvas.width / 2, canvas.height / 2);
-  ctx.rotate(turns * Math.PI / 180);
-  ctx.drawImage(source, -source.width / 2, -source.height / 2);
-  return canvas;
-}
-
-function enhanceEssay(source) {
-  const cv = window.cv;
-  const src = cv.imread(source);
-  const gray = new cv.Mat();
-  const background = new cv.Mat();
-  const normalized = new cv.Mat();
-  const soft = new cv.Mat();
-  const sharp = new cv.Mat();
-  const canvas = document.createElement("canvas");
-
-  try {
-    cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-    cv.GaussianBlur(gray, background, new cv.Size(31, 31), 0, 0, cv.BORDER_DEFAULT);
-    cv.divide(gray, background, normalized, 255);
-    cv.GaussianBlur(normalized, soft, new cv.Size(3, 3), 0, 0, cv.BORDER_DEFAULT);
-    cv.addWeighted(normalized, 1.28, soft, -0.28, 0, sharp);
-    cv.imshow(canvas, sharp);
-    return canvas;
-  } finally {
-    src.delete(); gray.delete(); background.delete(); normalized.delete(); soft.delete(); sharp.delete();
-  }
-}
-
 async function processPage(page, {detect = false} = {}) {
   page.busy = true;
   state.processing++;
@@ -388,26 +366,27 @@ async function processPage(page, {detect = false} = {}) {
     page.sourceWidth = source.width;
     page.sourceHeight = source.height;
 
-    if (detect || !page.corners) {
-      page.blurScore = blurScore(source);
-      const autoCorners = detectCorners(source);
-      page.autoDetected = Boolean(autoCorners);
-      page.corners = autoCorners || defaultCorners(source.width, source.height);
-    }
+    const ready = await ensureScannerReady();
+    if (!ready) throw new Error("掃描引擎尚未準備完成，請再試一次");
 
-    if (!validCorners(page.corners, source.width, source.height)) {
-      page.corners = defaultCorners(source.width, source.height);
-      page.autoDetected = false;
-    }
+    const currentCorners = (!detect && page.corners && validCorners(page.corners, source.width, source.height))
+      ? cloneCorners(page.corners)
+      : null;
 
-    const size = outputDimensions(page.corners);
-    let extracted = state.scanner.extractPaper(source, size.width, size.height, page.corners);
-    if (!extracted) throw new Error("無法完成紙張透視校正");
+    const {payload, transfer} = canvasWorkerPayload(source);
+    const result = await workerRequest("process", {
+      ...payload,
+      corners: currentCorners,
+      mode: page.mode,
+      rotation: page.rotation
+    }, transfer, 60000);
 
-    extracted = rotateCanvas(extracted, page.rotation);
-    const finalCanvas = page.mode === "enhanced" ? enhanceEssay(extracted) : extracted;
+    page.corners = result.corners || defaultCorners(source.width, source.height);
+    page.autoDetected = currentCorners ? true : Boolean(result.autoDetected);
+    page.blurScore = result.blurScore;
+
+    const finalCanvas = workerImageToCanvas(result);
     const quality = page.mode === "enhanced" ? JPEG_QUALITY_ENHANCED : JPEG_QUALITY_ORIGINAL;
-
     page.processedDataUrl = finalCanvas.toDataURL("image/jpeg", quality);
     page.outputWidth = finalCanvas.width;
     page.outputHeight = finalCanvas.height;
@@ -432,14 +411,6 @@ async function addFiles(fileList) {
     return;
   }
 
-  if (!state.cvReady) {
-    setEngineStatus(`已收到 ${files.length} 張照片，正在載入掃描引擎…`, "warn");
-    await ensureScannerReady();
-    if (!state.cvReady) {
-      setEngineStatus("掃描引擎載入失敗，請重新整理頁面後再試。", "bad");
-      return;
-    }
-  }
   const available = Math.max(0, MAX_PAGES - state.pages.length);
   const accepted = files.slice(0, available);
 
@@ -448,35 +419,47 @@ async function addFiles(fileList) {
     return;
   }
 
+  const pagesToProcess = accepted.map(file => ({
+    id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+    file,
+    mode: "enhanced",
+    rotation: 0,
+    corners: null,
+    autoDetected: false,
+    blurScore: null,
+    processedDataUrl: "",
+    busy: false,
+    error: ""
+  }));
+
+  state.pages.push(...pagesToProcess);
+  renderPages();
+
   if (files.length > accepted.length) {
-    setEngineStatus(`最多支援 ${MAX_PAGES} 頁，超出的照片未加入。`, "warn");
+    setEngineStatus(`已加入 ${accepted.length} 頁；最多支援 ${MAX_PAGES} 頁，超出的照片未加入。`, "warn");
   } else {
-    setEngineStatus(`正在處理 ${accepted.length} 頁…`);
+    setEngineStatus(`已收到 ${accepted.length} 張照片，準備掃描…`);
   }
 
-  for (let i = 0; i < accepted.length; i++) {
-    const file = accepted[i];
-    setEngineStatus(`正在掃描第 ${i + 1} / ${accepted.length} 頁…`);
-    const page = {
-      id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
-      file,
-      mode: "enhanced",
-      rotation: 0,
-      corners: null,
-      autoDetected: false,
-      blurScore: null,
-      processedDataUrl: "",
-      busy: false,
-      error: ""
-    };
-    state.pages.push(page);
-    renderPages();
+  if (!state.cvReady) {
+    const ready = await ensureScannerReady();
+    if (!ready) {
+      pagesToProcess.forEach(page => { page.error = "掃描引擎載入失敗，請重新整理後再試。"; });
+      renderPages();
+      setEngineStatus("掃描引擎載入失敗，請確認網路後重新整理。", "bad");
+      return;
+    }
+  }
+
+  for (let i = 0; i < pagesToProcess.length; i++) {
+    const page = pagesToProcess[i];
+    setEngineStatus(`正在掃描第 ${i + 1} / ${pagesToProcess.length} 頁…`);
     await processPage(page, {detect: true});
   }
 
   const failed = state.pages.filter(page => page.error).length;
   setEngineStatus(
-    failed ? `已加入頁面，但有 ${failed} 頁需要重新處理。` : `完成，目前共 ${state.pages.length} 頁。`,
+    failed ? `已加入頁面，但有 ${failed} 頁處理失敗，請刪除後重拍或重新加入。` : `完成，目前共 ${state.pages.length} 頁。`,
     failed ? "warn" : "ok"
   );
 }
@@ -668,14 +651,33 @@ async function openCropEditor(pageId) {
   }
 }
 
-redetectBtn.addEventListener("click", () => {
+redetectBtn.addEventListener("click", async () => {
   if (!state.editorSource) return;
-  const detected = detectCorners(state.editorSource);
-  if (detected) {
-    state.editorCorners = detected;
-    drawCropEditor();
-  } else {
-    setEngineStatus("仍然找不到可靠紙張邊界，請直接拖動四個圓點。", "warn");
+
+  redetectBtn.disabled = true;
+  const originalText = redetectBtn.textContent;
+  redetectBtn.textContent = "偵測中…";
+
+  try {
+    const ready = await ensureScannerReady();
+    if (!ready) throw new Error("掃描引擎尚未準備完成");
+
+    const {payload, transfer} = canvasWorkerPayload(state.editorSource);
+    const result = await workerRequest("detect", payload, transfer, 45000);
+
+    if (result.corners) {
+      state.editorCorners = result.corners;
+      drawCropEditor();
+      setEngineStatus("已重新偵測紙張四角。", "ok");
+    } else {
+      setEngineStatus("仍然找不到可靠紙張邊界，請直接拖動四個圓點。", "warn");
+    }
+  } catch (error) {
+    console.error(error);
+    setEngineStatus(error.message || "重新偵測失敗", "bad");
+  } finally {
+    redetectBtn.disabled = false;
+    redetectBtn.textContent = originalText;
   }
 });
 
@@ -794,3 +796,107 @@ window.addEventListener("unhandledrejection", event => {
   console.error(event.reason);
   setEngineStatus("掃描處理失敗，請重新整理後再試。", "bad");
 });
+
+
+async function canvasToFile(canvas, name = "selftest.png") {
+  const blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(result => result ? resolve(result) : reject(new Error("無法建立測試圖片")), "image/png");
+  });
+  return new File([blob], name, {type: "image/png"});
+}
+
+async function runBrowserSelfTest() {
+  if (new URLSearchParams(location.search).get("selftest") !== "1") return;
+
+  const marker = document.createElement("pre");
+  marker.id = "selfTestResult";
+  marker.style.cssText = "white-space:pre-wrap;padding:12px;background:#fff;border:1px solid #ddd";
+  marker.textContent = "SELFTEST RUNNING";
+  document.body.appendChild(marker);
+
+  try {
+    const canvas = document.createElement("canvas");
+    canvas.width = 900;
+    canvas.height = 1200;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle = "#4b5563";
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.moveTo(120, 80);
+    ctx.lineTo(790, 130);
+    ctx.lineTo(750, 1110);
+    ctx.lineTo(80, 1050);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 2;
+    for (let y = 250; y < 1000; y += 100) {
+      ctx.beginPath();
+      ctx.moveTo(160, y);
+      ctx.lineTo(700, y + 35);
+      ctx.stroke();
+    }
+
+    ctx.fillStyle = "#111827";
+    ctx.font = "34px sans-serif";
+    ctx.fillText("作文掃描測試", 190, 210);
+    ctx.font = "25px sans-serif";
+    ctx.fillText("這是一張故意歪斜的作文頁。", 180, 320);
+    ctx.fillText("應該可以被偵測、拉正與增強。", 170, 420);
+
+    const file = await canvasToFile(canvas);
+    await addFiles([file]);
+
+    if (state.pages.length !== 1) throw new Error("頁面沒有成功加入");
+    const page = state.pages[0];
+    if (!page.processedDataUrl || page.processedDataUrl.length < 1000) throw new Error("掃描結果未產生");
+    if (!validCorners(page.corners, page.sourceWidth, page.sourceHeight)) throw new Error("紙張四角無效");
+
+    page.rotation = 90;
+    await processPage(page);
+    if (!page.processedDataUrl) throw new Error("旋轉後處理失敗");
+
+    page.rotation = 0;
+    page.mode = "original";
+    await processPage(page);
+    if (!page.processedDataUrl) throw new Error("原稿模式處理失敗");
+
+    $("#className").value = "116";
+    $("#seatNo").value = "1";
+    $("#studentName").value = "張沛芸";
+    $("#essayTitle").value = "通關密語";
+    $("#practice").value = "一";
+    updateFilename();
+
+    const expected = "116-1_張沛芸_通關密語（一）.pdf";
+    if (currentFilename() !== expected) throw new Error("檔名規則失敗");
+
+    const pdfReady = await ensurePdfReady();
+    if (!pdfReady) throw new Error("PDF 引擎載入失敗");
+
+    const {jsPDF} = window.jspdf;
+    const pdf = new jsPDF({orientation: "p", unit: "mm", format: "a4", compress: true});
+    pdf.addImage(page.processedDataUrl, "JPEG", 8, 8, 194, 274, undefined, "FAST");
+    const pdfBytes = pdf.output("arraybuffer").byteLength;
+    if (pdfBytes < 1000) throw new Error("PDF 產出異常");
+
+    marker.textContent = [
+      "SELFTEST PASS",
+      `pages=${state.pages.length}`,
+      `autoDetected=${page.autoDetected}`,
+      `output=${page.outputWidth}x${page.outputHeight}`,
+      `pdfBytes=${pdfBytes}`,
+      `filename=${currentFilename()}`
+    ].join("\n");
+    document.documentElement.dataset.selftest = "pass";
+  } catch (error) {
+    console.error(error);
+    marker.textContent = `SELFTEST FAIL\n${error?.stack || error}`;
+    document.documentElement.dataset.selftest = "fail";
+  }
+}
+
+runBrowserSelfTest();
