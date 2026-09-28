@@ -5,6 +5,9 @@ const SOURCE_MAX_EDGE = 2200;
 const ANALYSIS_MAX_EDGE = 1000;
 const JPEG_QUALITY_ENHANCED = 0.80;
 const JPEG_QUALITY_ORIGINAL = 0.84;
+const OPENCV_URL = "https://docs.opencv.org/4.10.0/opencv.js";
+const JSCANIFY_URL = "https://cdn.jsdelivr.net/npm/jscanify@1.4.3/src/jscanify.js";
+const JSPDF_URL = "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js";
 
 const state = {
   cvReady: false,
@@ -14,7 +17,9 @@ const state = {
   editorPageId: null,
   editorSource: null,
   editorCorners: null,
-  draggingCorner: null
+  draggingCorner: null,
+  enginePromise: null,
+  pdfPromise: null
 };
 
 const cameraInput = $("#cameraInput");
@@ -101,26 +106,102 @@ function dataUrlBytes(dataUrl) {
   return Math.floor(payload.length * 0.75);
 }
 
-async function ensureScannerReady() {
-  const started = Date.now();
-  while (Date.now() - started < 20000) {
-    if (window.cv && typeof window.cv.then === "function") {
-      try { window.cv = await window.cv; } catch (_) {}
-    }
-    if (window.cv?.Mat && window.jscanify) {
-      state.scanner = new window.jscanify();
-      state.cvReady = true;
-      setEngineStatus("掃描引擎已就緒", "ok");
-      updateExportState();
-      return;
-    }
-    await new Promise(resolve => setTimeout(resolve, 250));
-  }
-  setEngineStatus("掃描引擎載入失敗，請確認網路後重新整理頁面。", "bad");
+function waitFor(test, timeoutMs = 30000, intervalMs = 100) {
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const tick = () => {
+      try {
+        if (test()) return resolve(true);
+      } catch (_) {}
+      if (Date.now() - started >= timeoutMs) return reject(new Error("載入逾時"));
+      setTimeout(tick, intervalMs);
+    };
+    tick();
+  });
 }
 
-window.addEventListener("opencv-ready", ensureScannerReady, {once: true});
-window.addEventListener("load", ensureScannerReady, {once: true});
+function loadScript(src, readyTest, timeoutMs = 45000) {
+  if (readyTest()) return Promise.resolve();
+
+  return new Promise((resolve, reject) => {
+    const absolute = new URL(src, location.href).href;
+    let script = [...document.scripts].find(item => item.src === absolute);
+    const timer = setTimeout(() => reject(new Error(`載入逾時：${src}`)), timeoutMs);
+
+    const finish = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const fail = () => {
+      clearTimeout(timer);
+      reject(new Error(`無法載入：${src}`));
+    };
+
+    if (script) {
+      script.addEventListener("load", finish, {once: true});
+      script.addEventListener("error", fail, {once: true});
+      if (readyTest()) finish();
+      return;
+    }
+
+    script = document.createElement("script");
+    script.src = src;
+    script.async = true;
+    script.addEventListener("load", finish, {once: true});
+    script.addEventListener("error", fail, {once: true});
+    document.head.appendChild(script);
+  });
+}
+
+async function ensureScannerReady() {
+  if (state.cvReady && state.scanner) return true;
+  if (state.enginePromise) return state.enginePromise;
+
+  state.enginePromise = (async () => {
+    setEngineStatus("正在載入掃描引擎，第一次使用可能需要數秒…");
+
+    await loadScript(OPENCV_URL, () => Boolean(window.cv));
+    if (window.cv && typeof window.cv.then === "function") {
+      window.cv = await window.cv;
+    }
+    await waitFor(() => Boolean(window.cv?.Mat), 30000);
+
+    await loadScript(JSCANIFY_URL, () => Boolean(window.jscanify));
+    await waitFor(() => Boolean(window.jscanify), 10000);
+
+    state.scanner = new window.jscanify();
+    state.cvReady = true;
+    setEngineStatus("掃描引擎已就緒", "ok");
+    updateExportState();
+    return true;
+  })().catch(error => {
+    console.error(error);
+    state.enginePromise = null;
+    state.cvReady = false;
+    setEngineStatus("掃描引擎載入失敗。請確認網路後再試一次。", "bad");
+    return false;
+  });
+
+  return state.enginePromise;
+}
+
+async function ensurePdfReady() {
+  if (window.jspdf?.jsPDF) return true;
+  if (state.pdfPromise) return state.pdfPromise;
+
+  state.pdfPromise = loadScript(JSPDF_URL, () => Boolean(window.jspdf?.jsPDF))
+    .then(() => waitFor(() => Boolean(window.jspdf?.jsPDF), 10000))
+    .then(() => true)
+    .catch(error => {
+      console.error(error);
+      state.pdfPromise = null;
+      return false;
+    });
+
+  return state.pdfPromise;
+}
+
+setEngineStatus("準備完成。選擇照片後會自動開始掃描。", "ok");
 
 async function loadFileToCanvas(file, maxEdge = SOURCE_MAX_EDGE) {
   const url = URL.createObjectURL(file);
@@ -204,10 +285,13 @@ function blurScore(canvas) {
   const stddev = new cv.Mat();
   try {
     cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY);
-    cv.Laplacian(gray, lap, cv.CV_64F);
+    cv.Laplacian(gray, lap, cv.CV_32F);
     cv.meanStdDev(lap, mean, stddev);
-    const sigma = stddev.data64F?.[0] || 0;
+    const sigma = stddev.data64F?.[0] ?? stddev.data32F?.[0] ?? 0;
     return sigma * sigma;
+  } catch (error) {
+    console.warn("Blur check skipped:", error);
+    return null;
   } finally {
     src.delete(); gray.delete(); lap.delete(); mean.delete(); stddev.delete();
   }
@@ -619,12 +703,17 @@ cropDialog.addEventListener("close", () => {
 async function exportPdf() {
   const filename = currentFilename();
   if (!filename || !state.pages.length) return;
-  if (!window.jspdf?.jsPDF) {
-    setExportStatus("PDF 引擎尚未載入，請確認網路後重試。", "bad");
+
+  exportBtn.disabled = true;
+  setExportStatus("正在準備 PDF…");
+
+  const pdfReady = await ensurePdfReady();
+  if (!pdfReady) {
+    setExportStatus("PDF 引擎載入失敗，請確認網路後再試。", "bad");
+    updateExportState();
     return;
   }
 
-  exportBtn.disabled = true;
   setExportStatus("正在產生 PDF…");
 
   try {
