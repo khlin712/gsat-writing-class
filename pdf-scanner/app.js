@@ -5,7 +5,7 @@ const SOURCE_MAX_EDGE = 2200;
 const JPEG_QUALITY_ENHANCED = 0.80;
 const JPEG_QUALITY_ORIGINAL = 0.84;
 const JSPDF_URL = "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js";
-const WORKER_URL = "./scan-worker.js?v=20260929-2";
+const WORKER_URL = "./scan-worker.js?v=20260929-3";
 
 const state = {
   cvReady: false,
@@ -184,6 +184,12 @@ function startWorker() {
 
     const pending = state.workerPending.get(message.id);
     if (!pending) return;
+
+    if (message.type === "progress") {
+      if (typeof pending.onProgress === "function") pending.onProgress(message.stage);
+      return;
+    }
+
     state.workerPending.delete(message.id);
     clearTimeout(pending.timer);
 
@@ -243,7 +249,7 @@ async function ensureScannerReady() {
   return state.enginePromise;
 }
 
-function workerRequest(action, payload, transfer = [], timeoutMs = 45000) {
+function workerRequest(action, payload, transfer = [], timeoutMs = 45000, onProgress = null) {
   const worker = startWorker();
   const id = ++state.workerSeq;
 
@@ -253,7 +259,7 @@ function workerRequest(action, payload, transfer = [], timeoutMs = 45000) {
       reject(new Error("掃描處理逾時，請重試這一頁"));
     }, timeoutMs);
 
-    state.workerPending.set(id, {resolve, reject, timer});
+    state.workerPending.set(id, {resolve, reject, timer, onProgress});
     worker.postMessage({id, action, payload}, transfer);
   });
 }
@@ -328,8 +334,8 @@ async function loadFileToCanvas(file, maxEdge = SOURCE_MAX_EDGE) {
 }
 
 function defaultCorners(width, height) {
-  const insetX = Math.round(width * 0.035);
-  const insetY = Math.round(height * 0.035);
+  const insetX = Math.round(width * 0.01);
+  const insetY = Math.round(height * 0.01);
   return {
     topLeftCorner: {x: insetX, y: insetY},
     topRightCorner: {x: width - insetX, y: insetY},
@@ -361,8 +367,17 @@ function validCorners(corners, width, height) {
   return polygonArea(corners) >= width * height * 0.12;
 }
 
+const PROCESS_STAGE_LABELS = {
+  detecting: "尋找白色紙張",
+  perspective: "校正紙張",
+  enhancing: "強化白底黑字",
+  rendering: "建立原稿預覽",
+  encoding: "建立預覽"
+};
+
 async function processPage(page, {detect = false} = {}) {
   page.busy = true;
+  page.stage = "讀取照片";
   state.processing++;
   updateExportState();
   renderPages();
@@ -371,6 +386,8 @@ async function processPage(page, {detect = false} = {}) {
     const source = await loadFileToCanvas(page.file);
     page.sourceWidth = source.width;
     page.sourceHeight = source.height;
+    page.stage = "準備掃描引擎";
+    renderPages();
 
     const ready = await ensureScannerReady();
     if (!ready) throw new Error("掃描引擎尚未準備完成，請再試一次");
@@ -385,11 +402,19 @@ async function processPage(page, {detect = false} = {}) {
       corners: currentCorners,
       mode: page.mode,
       rotation: page.rotation
-    }, transfer, 60000);
+    }, transfer, 60000, stage => {
+      page.stage = PROCESS_STAGE_LABELS[stage] || "處理中";
+      renderPages();
+    });
 
     page.corners = result.corners || defaultCorners(source.width, source.height);
-    page.autoDetected = currentCorners ? true : Boolean(result.autoDetected);
+    if (detect || !currentCorners) page.autoDetected = Boolean(result.autoDetected);
+    page.detectionConfidence = result.detectionConfidence;
+    page.paperWhiteRatio = result.paperWhiteRatio;
+    page.paperAreaRatio = result.paperAreaRatio;
     page.blurScore = result.blurScore;
+    page.stage = "建立預覽";
+    renderPages();
 
     const finalCanvas = workerImageToCanvas(result);
     const quality = page.mode === "enhanced" ? JPEG_QUALITY_ENHANCED : JPEG_QUALITY_ORIGINAL;
@@ -404,6 +429,7 @@ async function processPage(page, {detect = false} = {}) {
     page.processedDataUrl = "";
   } finally {
     page.busy = false;
+    page.stage = "";
     state.processing--;
     renderPages();
     updateExportState();
@@ -432,8 +458,12 @@ async function addFiles(fileList) {
     rotation: 0,
     corners: null,
     autoDetected: false,
+    detectionConfidence: null,
+    paperWhiteRatio: null,
+    paperAreaRatio: null,
     blurScore: null,
     processedDataUrl: "",
+    stage: "等待處理",
     busy: false,
     error: ""
   }));
@@ -472,7 +502,11 @@ async function addFiles(fileList) {
 
 function pageWarnings(page) {
   const warnings = [];
-  if (!page.autoDetected) warnings.push("請確認四角");
+  if (!page.autoDetected) {
+    warnings.push("請確認四角");
+  } else if (Number.isFinite(page.detectionConfidence) && page.detectionConfidence < 0.72) {
+    warnings.push("建議確認四角");
+  }
   if (Number.isFinite(page.blurScore) && page.blurScore < 35) warnings.push("照片可能偏糊");
   if (page.outputWidth > page.outputHeight * 1.12) warnings.push("頁面看起來是橫向");
   return warnings;
@@ -490,26 +524,30 @@ function renderPages() {
     card.className = "page-card";
     const warnings = pageWarnings(page);
     const sizeText = page.outputBytes ? ` · 約 ${humanBytes(page.outputBytes)}` : "";
+    const confidenceText = Number.isFinite(page.detectionConfidence)
+      ? ` · 邊界信心 ${Math.round(page.detectionConfidence * 100)}%`
+      : "";
 
     card.innerHTML = `
       <div class="thumb">
-        ${page.processedDataUrl ? `<img src="${page.processedDataUrl}" alt="第 ${index + 1} 頁預覽">` : "處理中…"}
+        ${page.processedDataUrl ? `<img src="${page.processedDataUrl}" alt="第 ${index + 1} 頁預覽">` : page.busy ? (page.stage || "處理中…") : page.error ? "處理失敗" : "準備中"}
       </div>
       <div>
         <div class="page-title">
           <h3>第 ${index + 1} 頁</h3>
-          <span class="badge ${warnings.length ? "warn" : ""}">${page.busy ? "處理中" : page.error ? "處理失敗" : warnings.length ? warnings.join(" · ") : "掃描完成"}</span>
+          <span class="badge ${warnings.length ? "warn" : ""}">${page.busy ? (page.stage || "處理中") : page.error ? "處理失敗" : warnings.length ? warnings.join(" · ") : "掃描完成"}</span>
         </div>
         <div class="page-meta">
-          ${page.error ? page.error : page.outputWidth ? `${page.outputWidth} × ${page.outputHeight}px${sizeText}` : "準備中"}
+          ${page.error ? page.error : page.busy ? `正在${page.stage || "處理"}…` : page.outputWidth ? `${page.outputWidth} × ${page.outputHeight}px${sizeText}${confidenceText}` : "準備中"}
         </div>
         <div class="mode-toggle" aria-label="頁面顯示模式">
           <button type="button" data-mode="enhanced" class="${page.mode === "enhanced" ? "active" : ""}">作文清晰</button>
           <button type="button" data-mode="original" class="${page.mode === "original" ? "active" : ""}">原稿</button>
         </div>
         <div class="page-actions">
-          <button type="button" data-act="crop">調整四角</button>
-          <button type="button" data-act="rotate">右轉 90°</button>
+          <button type="button" data-act="crop" ${page.busy ? "disabled" : ""}>調整四角</button>
+          <button type="button" data-act="rotate" ${page.busy ? "disabled" : ""}>右轉 90°</button>
+          ${page.error ? '<button type="button" data-act="retry">重新處理</button>' : ""}
           <button type="button" data-act="up" ${index === 0 ? "disabled" : ""}>上移</button>
           <button type="button" data-act="down" ${index === state.pages.length - 1 ? "disabled" : ""}>下移</button>
           <button type="button" data-act="delete" class="danger">刪除</button>
@@ -525,6 +563,13 @@ function renderPages() {
     card.querySelector('[data-act="up"]').onclick = () => movePage(index, -1);
     card.querySelector('[data-act="down"]').onclick = () => movePage(index, 1);
     card.querySelector('[data-act="delete"]').onclick = () => deletePage(index);
+    const retryButton = card.querySelector('[data-act="retry"]');
+    if (retryButton) {
+      retryButton.onclick = async () => {
+        page.error = "";
+        await processPage(page, {detect: !page.autoDetected});
+      };
+    }
 
     card.querySelectorAll("[data-mode]").forEach(button => {
       button.onclick = async () => {
@@ -671,12 +716,13 @@ redetectBtn.addEventListener("click", async () => {
     const {payload, transfer} = canvasWorkerPayload(state.editorSource);
     const result = await workerRequest("detect", payload, transfer, 45000);
 
+    const confidence = Number.isFinite(result.confidence) ? Math.round(result.confidence * 100) : 0;
     if (result.corners) {
       state.editorCorners = result.corners;
       drawCropEditor();
-      setEngineStatus("已重新偵測紙張四角。", "ok");
+      setEngineStatus(`已重新偵測白色紙張四角（信心 ${confidence}%）。`, "ok");
     } else {
-      setEngineStatus("仍然找不到可靠紙張邊界，請直接拖動四個圓點。", "warn");
+      setEngineStatus(`找不到可靠白色紙張邊界（目前信心 ${confidence}%），已保留目前四角，請直接拖動圓點。`, "warn");
     }
   } catch (error) {
     console.error(error);
@@ -697,6 +743,7 @@ saveCropBtn.addEventListener("click", async () => {
 
   page.corners = cloneCorners(state.editorCorners);
   page.autoDetected = true;
+  page.detectionConfidence = 1;
   cropDialog.close();
   await processPage(page);
 });
@@ -893,6 +940,7 @@ async function runBrowserSelfTest() {
       "SELFTEST PASS",
       `pages=${state.pages.length}`,
       `autoDetected=${page.autoDetected}`,
+      `detectionConfidence=${Number.isFinite(page.detectionConfidence) ? page.detectionConfidence.toFixed(2) : "n/a"}`,
       `output=${page.outputWidth}x${page.outputHeight}`,
       `pdfBytes=${pdfBytes}`,
       `filename=${currentFilename()}`
