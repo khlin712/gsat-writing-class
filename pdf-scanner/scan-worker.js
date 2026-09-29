@@ -95,6 +95,47 @@ function detectCorners(src) {
   const pagePixels = Math.max(1, Math.round(src.cols * scale) * Math.round(src.rows * scale));
   const minimumArea = pagePixels * 0.16;
 
+  function pointInConvexQuad(x, y, ordered) {
+    const points = [
+      ordered.topLeftCorner,
+      ordered.topRightCorner,
+      ordered.bottomRightCorner,
+      ordered.bottomLeftCorner
+    ];
+    let direction = 0;
+    for (let i = 0; i < 4; i++) {
+      const a = points[i];
+      const b = points[(i + 1) % 4];
+      const cross = (b.x - a.x) * (y - a.y) - (b.y - a.y) * (x - a.x);
+      if (Math.abs(cross) < 0.001) continue;
+      const current = cross > 0 ? 1 : -1;
+      if (!direction) direction = current;
+      else if (direction !== current) return false;
+    }
+    return true;
+  }
+
+  function paperWhiteRatio(ordered) {
+    const points = Object.values(ordered);
+    const minX = Math.max(0, Math.floor(Math.min(...points.map(p => p.x))));
+    const maxX = Math.min(gray.cols - 1, Math.ceil(Math.max(...points.map(p => p.x))));
+    const minY = Math.max(0, Math.floor(Math.min(...points.map(p => p.y))));
+    const maxY = Math.min(gray.rows - 1, Math.ceil(Math.max(...points.map(p => p.y))));
+    const step = Math.max(2, Math.round(Math.max(gray.cols, gray.rows) / 260));
+    let bright = 0;
+    let sampled = 0;
+
+    for (let y = minY; y <= maxY; y += step) {
+      const rowOffset = y * gray.cols;
+      for (let x = minX; x <= maxX; x += step) {
+        if (!pointInConvexQuad(x, y, ordered)) continue;
+        sampled++;
+        if (gray.data[rowOffset + x] >= 150) bright++;
+      }
+    }
+    return sampled ? bright / sampled : 0;
+  }
+
   function candidateFromContour(contour) {
     const area = Math.abs(cv.contourArea(contour));
     if (area < minimumArea) return null;
@@ -111,27 +152,7 @@ function detectCorners(src) {
         smallPoints.push({x: ptr[0], y: ptr[1]});
       }
       const ordered = orderPoints(smallPoints);
-
-      const polygonMask = cv.Mat.zeros(small.rows, small.cols, cv.CV_8U);
-      const whiteInside = new cv.Mat();
-      const polygon = cv.matFromArray(4, 1, cv.CV_32SC2, [
-        Math.round(ordered.topLeftCorner.x), Math.round(ordered.topLeftCorner.y),
-        Math.round(ordered.topRightCorner.x), Math.round(ordered.topRightCorner.y),
-        Math.round(ordered.bottomRightCorner.x), Math.round(ordered.bottomRightCorner.y),
-        Math.round(ordered.bottomLeftCorner.x), Math.round(ordered.bottomLeftCorner.y)
-      ]);
-
-      let whiteRatio = 0;
-      try {
-        cv.fillConvexPoly(polygonMask, polygon, new cv.Scalar(255));
-        cv.bitwise_and(whiteMask, polygonMask, whiteInside);
-        const insideCount = cv.countNonZero(polygonMask);
-        if (insideCount > 0) whiteRatio = cv.countNonZero(whiteInside) / insideCount;
-      } finally {
-        polygonMask.delete();
-        whiteInside.delete();
-        polygon.delete();
-      }
+      const whiteRatio = paperWhiteRatio(ordered);
 
       const rect = cv.minAreaRect(approx);
       const rectArea = Math.max(1, rect.size.width * rect.size.height);
@@ -193,7 +214,7 @@ function detectCorners(src) {
     cv.findContours(edges, edgeContours, edgeHierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
 
     // 2) Essay-specific route: large bright paper against a darker background.
-    cv.threshold(gray, whiteMask, 165, 255, cv.THRESH_BINARY);
+    cv.threshold(gray, whiteMask, 150, 255, cv.THRESH_BINARY);
     const whiteKernel = cv.Mat.ones(7, 7, cv.CV_8U);
     cv.morphologyEx(whiteMask, whiteMask, cv.MORPH_CLOSE, whiteKernel, new cv.Point(-1, -1), 2);
     whiteKernel.delete();
@@ -207,7 +228,7 @@ function detectCorners(src) {
     }
 
     // Below this confidence, preserve almost the full image and ask the user to confirm corners.
-    const reliable = best.confidence >= 0.58 && best.whiteRatio >= 0.50 && best.areaRatio >= 0.16;
+    const reliable = best.confidence >= 0.58 && best.whiteRatio >= 0.48 && best.areaRatio >= 0.16;
     return {
       corners: reliable ? best.corners : null,
       confidence: best.confidence,
