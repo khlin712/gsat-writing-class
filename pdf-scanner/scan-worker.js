@@ -139,7 +139,7 @@ function detectCorners(src) {
     return sampled ? bright / sampled : 0;
   }
 
-  function candidateFromContour(contour) {
+  function candidateFromContour(contour, source) {
     const area = Math.abs(cv.contourArea(contour));
     if (area < minimumArea) return null;
 
@@ -180,9 +180,11 @@ function detectCorners(src) {
       );
 
       return {
+        source,
         confidence,
         whiteRatio,
         areaRatio,
+        rectangularity,
         corners: {
           topLeftCorner: {x: ordered.topLeftCorner.x / scale, y: ordered.topLeftCorner.y / scale},
           topRightCorner: {x: ordered.topRightCorner.x / scale, y: ordered.topRightCorner.y / scale},
@@ -196,12 +198,12 @@ function detectCorners(src) {
     }
   }
 
-  function considerContours(contours, currentBest) {
+  function considerContours(contours, currentBest, source) {
     let best = currentBest;
     for (let i = 0; i < contours.size(); i++) {
       const contour = contours.get(i);
       try {
-        const candidate = candidateFromContour(contour);
+        const candidate = candidateFromContour(contour, source);
         if (candidate && (!best || candidate.confidence > best.confidence)) best = candidate;
       } finally {
         contour.delete();
@@ -259,21 +261,43 @@ function detectCorners(src) {
     whiteKernel.delete();
     cv.findContours(whiteMask, whiteContours, whiteHierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-    let best = considerContours(neutralContours, null);
-    best = considerContours(edgeContours, best);
-    best = considerContours(whiteContours, best);
+    const bestNeutral = considerContours(neutralContours, null, "neutral");
+    const bestEdge = considerContours(edgeContours, null, "edge");
+    const bestWhite = considerContours(whiteContours, null, "white");
+    const best = [bestEdge, bestWhite, bestNeutral].filter(Boolean)
+      .sort((a, b) => b.confidence - a.confidence)[0] || null;
 
     if (!best) {
       return {corners: null, confidence: 0, whiteRatio: 0, areaRatio: 0};
     }
 
-    // Below this confidence, preserve almost the full image and ask the user to confirm corners.
-    const reliable = best.confidence >= 0.58 && best.whiteRatio >= 0.48 && best.areaRatio >= 0.16;
+    let edgeReliable = false;
+    if (bestEdge) {
+      const c = bestEdge.corners;
+      const width = Math.max(
+        dist(c.topLeftCorner, c.topRightCorner),
+        dist(c.bottomLeftCorner, c.bottomRightCorner)
+      );
+      const height = Math.max(
+        dist(c.topLeftCorner, c.bottomLeftCorner),
+        dist(c.topRightCorner, c.bottomRightCorner)
+      );
+      const ratio = width / Math.max(1, height);
+      edgeReliable =
+        bestEdge.confidence >= 0.88 &&
+        bestEdge.whiteRatio >= 0.65 &&
+        bestEdge.areaRatio >= 0.45 &&
+        bestEdge.rectangularity >= 0.75 &&
+        ratio >= 1.25 &&
+        ratio <= 1.70;
+    }
+
+    const chosen = edgeReliable ? bestEdge : best;
     return {
-      corners: reliable ? best.corners : null,
-      confidence: best.confidence,
-      whiteRatio: best.whiteRatio,
-      areaRatio: best.areaRatio
+      corners: edgeReliable ? bestEdge.corners : null,
+      confidence: chosen.confidence,
+      whiteRatio: chosen.whiteRatio,
+      areaRatio: chosen.areaRatio
     };
   } finally {
     small.delete();
