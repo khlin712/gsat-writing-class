@@ -26,8 +26,8 @@ h1{margin:0 0 8px;font-size:30px;letter-spacing:-.035em}
 .status.ok{color:var(--ok)}.status.warn{color:var(--warn)}.status.bad{color:var(--bad)}
 .pages{display:grid;gap:12px;margin-top:14px}
 .empty{padding:18px 8px;text-align:center;color:var(--muted);font-size:13px}
-.page-card{display:grid;grid-template-columns:112px 1fr;gap:12px;border:1px solid var(--line);border-radius:14px;padding:10px;background:#fff}
-.thumb{width:112px;aspect-ratio:1/1.414;border-radius:8px;background:#eef2f7;overflow:hidden;display:grid;place-items:center}
+.page-card{display:grid;grid-template-columns:150px 1fr;gap:12px;border:1px solid var(--line);border-radius:14px;padding:10px;background:#fff}
+.thumb{width:150px;aspect-ratio:1.414/1;border-radius:8px;background:#eef2f7;overflow:hidden;display:grid;place-items:center}
 .thumb img{width:100%;height:100%;object-fit:contain}
 .page-title{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .page-title h3{margin:1px 0;font-size:15px}
@@ -65,7 +65,7 @@ button:disabled{opacity:.45;cursor:not-allowed}
   .app{padding-left:10px;padding-right:10px}
   .scan-buttons{grid-template-columns:1fr 1fr}
   .form-grid{grid-template-columns:1fr}
-  .page-card{grid-template-columns:92px 1fr}
-  .thumb{width:92px}
+  .page-card{grid-template-columns:118px 1fr}
+  .thumb{width:118px}
   .page-actions button{padding:8px 9px;font-size:12px}
 }
