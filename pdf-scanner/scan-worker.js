@@ -69,8 +69,9 @@ function orderPoints(points) {
 }
 
 function defaultCorners(width, height) {
-  const x = Math.round(width * 0.035);
-  const y = Math.round(height * 0.035);
+  // Low-confidence fallback keeps almost the entire photo instead of guessing a crop.
+  const x = Math.round(width * 0.01);
+  const y = Math.round(height * 0.01);
   return {
     topLeftCorner: {x, y},
     topRightCorner: {x: width - x, y},
@@ -86,8 +87,93 @@ function detectCorners(src) {
   const gray = new cv.Mat();
   const blur = new cv.Mat();
   const edges = new cv.Mat();
-  const contours = new cv.MatVector();
-  const hierarchy = new cv.Mat();
+  const whiteMask = new cv.Mat();
+  const edgeContours = new cv.MatVector();
+  const edgeHierarchy = new cv.Mat();
+  const whiteContours = new cv.MatVector();
+  const whiteHierarchy = new cv.Mat();
+  const pagePixels = Math.max(1, Math.round(src.cols * scale) * Math.round(src.rows * scale));
+  const minimumArea = pagePixels * 0.16;
+
+  function candidateFromContour(contour) {
+    const area = Math.abs(cv.contourArea(contour));
+    if (area < minimumArea) return null;
+
+    const perimeter = cv.arcLength(contour, true);
+    const approx = new cv.Mat();
+    try {
+      cv.approxPolyDP(contour, approx, 0.02 * perimeter, true);
+      if (approx.rows !== 4 || !cv.isContourConvex(approx)) return null;
+
+      const smallPoints = [];
+      for (let j = 0; j < 4; j++) {
+        const ptr = approx.intPtr(j, 0);
+        smallPoints.push({x: ptr[0], y: ptr[1]});
+      }
+      const ordered = orderPoints(smallPoints);
+
+      const polygonMask = cv.Mat.zeros(small.rows, small.cols, cv.CV_8U);
+      const whiteInside = new cv.Mat();
+      const polygon = cv.matFromArray(4, 1, cv.CV_32SC2, [
+        Math.round(ordered.topLeftCorner.x), Math.round(ordered.topLeftCorner.y),
+        Math.round(ordered.topRightCorner.x), Math.round(ordered.topRightCorner.y),
+        Math.round(ordered.bottomRightCorner.x), Math.round(ordered.bottomRightCorner.y),
+        Math.round(ordered.bottomLeftCorner.x), Math.round(ordered.bottomLeftCorner.y)
+      ]);
+
+      let whiteRatio = 0;
+      try {
+        cv.fillConvexPoly(polygonMask, polygon, new cv.Scalar(255));
+        cv.bitwise_and(whiteMask, polygonMask, whiteInside);
+        const insideCount = cv.countNonZero(polygonMask);
+        if (insideCount > 0) whiteRatio = cv.countNonZero(whiteInside) / insideCount;
+      } finally {
+        polygonMask.delete();
+        whiteInside.delete();
+        polygon.delete();
+      }
+
+      const rect = cv.minAreaRect(approx);
+      const rectArea = Math.max(1, rect.size.width * rect.size.height);
+      const rectangularity = Math.min(1, area / rectArea);
+      const areaRatio = Math.min(1, area / pagePixels);
+
+      // Essay paper is expected to be a large, bright, rectangular region.
+      const areaScore = Math.min(1, areaRatio / 0.58);
+      const confidence = Math.max(
+        0,
+        Math.min(1, areaScore * 0.42 + whiteRatio * 0.48 + rectangularity * 0.10)
+      );
+
+      return {
+        confidence,
+        whiteRatio,
+        areaRatio,
+        corners: {
+          topLeftCorner: {x: ordered.topLeftCorner.x / scale, y: ordered.topLeftCorner.y / scale},
+          topRightCorner: {x: ordered.topRightCorner.x / scale, y: ordered.topRightCorner.y / scale},
+          bottomLeftCorner: {x: ordered.bottomLeftCorner.x / scale, y: ordered.bottomLeftCorner.y / scale},
+          bottomRightCorner: {x: ordered.bottomRightCorner.x / scale, y: ordered.bottomRightCorner.y / scale}
+        }
+      };
+    } finally {
+      approx.delete();
+    }
+  }
+
+  function considerContours(contours, currentBest) {
+    let best = currentBest;
+    for (let i = 0; i < contours.size(); i++) {
+      const contour = contours.get(i);
+      try {
+        const candidate = candidateFromContour(contour);
+        if (candidate && (!best || candidate.confidence > best.confidence)) best = candidate;
+      } finally {
+        contour.delete();
+      }
+    }
+    return best;
+  }
 
   try {
     cv.resize(
@@ -97,93 +183,47 @@ function detectCorners(src) {
       0, 0, cv.INTER_AREA
     );
     cv.cvtColor(small, gray, cv.COLOR_RGBA2GRAY);
+
+    // 1) Traditional edge route catches paper even under uneven lighting.
     cv.GaussianBlur(gray, blur, new cv.Size(5, 5), 0, 0, cv.BORDER_DEFAULT);
-    cv.Canny(blur, edges, 50, 160);
+    cv.Canny(blur, edges, 45, 150);
+    const edgeKernel = cv.Mat.ones(3, 3, cv.CV_8U);
+    cv.dilate(edges, edges, edgeKernel, new cv.Point(-1, -1), 1);
+    edgeKernel.delete();
+    cv.findContours(edges, edgeContours, edgeHierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
 
-    const kernel = cv.Mat.ones(3, 3, cv.CV_8U);
-    cv.dilate(edges, edges, kernel, new cv.Point(-1, -1), 1);
-    kernel.delete();
+    // 2) Essay-specific route: large bright paper against a darker background.
+    cv.threshold(gray, whiteMask, 165, 255, cv.THRESH_BINARY);
+    const whiteKernel = cv.Mat.ones(7, 7, cv.CV_8U);
+    cv.morphologyEx(whiteMask, whiteMask, cv.MORPH_CLOSE, whiteKernel, new cv.Point(-1, -1), 2);
+    whiteKernel.delete();
+    cv.findContours(whiteMask, whiteContours, whiteHierarchy, cv.RETR_EXTERNAL, cv.CHAIN_APPROX_SIMPLE);
 
-    cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE);
+    let best = considerContours(edgeContours, null);
+    best = considerContours(whiteContours, best);
 
-    let bestPoints = null;
-    let bestArea = 0;
-    const minimumArea = small.cols * small.rows * 0.12;
-
-    for (let i = 0; i < contours.size(); i++) {
-      const contour = contours.get(i);
-      const area = Math.abs(cv.contourArea(contour));
-      if (area <= minimumArea || area <= bestArea) {
-        contour.delete();
-        continue;
-      }
-
-      const perimeter = cv.arcLength(contour, true);
-      const approx = new cv.Mat();
-      cv.approxPolyDP(contour, approx, 0.02 * perimeter, true);
-
-      if (approx.rows === 4) {
-        const points = [];
-        for (let j = 0; j < 4; j++) {
-          const ptr = approx.intPtr(j, 0);
-          points.push({x: ptr[0] / scale, y: ptr[1] / scale});
-        }
-        bestPoints = orderPoints(points);
-        bestArea = area;
-      }
-      approx.delete();
-      contour.delete();
+    if (!best) {
+      return {corners: null, confidence: 0, whiteRatio: 0, areaRatio: 0};
     }
 
-    if (bestPoints) return bestPoints;
-
-    // Fallback: use the largest contour's extreme points by quadrant.
-    let maxContour = null;
-    let maxArea = minimumArea;
-    for (let i = 0; i < contours.size(); i++) {
-      const contour = contours.get(i);
-      const area = Math.abs(cv.contourArea(contour));
-      if (area > maxArea) {
-        if (maxContour) maxContour.delete();
-        maxContour = contour.clone();
-        maxArea = area;
-      }
-      contour.delete();
-    }
-    if (!maxContour) return null;
-
-    const rect = cv.minAreaRect(maxContour);
-    const center = rect.center;
-    const quadrants = {
-      topLeftCorner: null,
-      topRightCorner: null,
-      bottomLeftCorner: null,
-      bottomRightCorner: null
+    // Below this confidence, preserve almost the full image and ask the user to confirm corners.
+    const reliable = best.confidence >= 0.58 && best.whiteRatio >= 0.50 && best.areaRatio >= 0.16;
+    return {
+      corners: reliable ? best.corners : null,
+      confidence: best.confidence,
+      whiteRatio: best.whiteRatio,
+      areaRatio: best.areaRatio
     };
-    const bestDist = {topLeftCorner:0, topRightCorner:0, bottomLeftCorner:0, bottomRightCorner:0};
-
-    for (let i = 0; i < maxContour.data32S.length; i += 2) {
-      const p = {x:maxContour.data32S[i], y:maxContour.data32S[i+1]};
-      let key;
-      if (p.x <= center.x && p.y <= center.y) key = "topLeftCorner";
-      else if (p.x > center.x && p.y <= center.y) key = "topRightCorner";
-      else if (p.x <= center.x && p.y > center.y) key = "bottomLeftCorner";
-      else key = "bottomRightCorner";
-      const d = Math.hypot(p.x-center.x, p.y-center.y);
-      if (d > bestDist[key]) {
-        bestDist[key] = d;
-        quadrants[key] = {x:p.x/scale, y:p.y/scale};
-      }
-    }
-    maxContour.delete();
-    return Object.values(quadrants).every(Boolean) ? quadrants : null;
   } finally {
     small.delete();
     gray.delete();
     blur.delete();
     edges.delete();
-    contours.delete();
-    hierarchy.delete();
+    whiteMask.delete();
+    edgeContours.delete();
+    edgeHierarchy.delete();
+    whiteContours.delete();
+    whiteHierarchy.delete();
   }
 }
 
@@ -264,17 +304,48 @@ function enhance(mat) {
   const gray = new cv.Mat();
   const background = new cv.Mat();
   const normalized = new cv.Mat();
+  const toned = new cv.Mat();
   const soft = new cv.Mat();
   const sharp = new cv.Mat();
+
   try {
     cv.cvtColor(mat, gray, cv.COLOR_RGBA2GRAY);
-    cv.GaussianBlur(gray, background, new cv.Size(31,31), 0, 0, cv.BORDER_DEFAULT);
+
+    // Estimate local illumination so shadows/yellowish lighting do not turn the page gray.
+    let kernelSize = Math.round(Math.min(gray.rows, gray.cols) / 28);
+    kernelSize = Math.max(31, Math.min(71, kernelSize));
+    if (kernelSize % 2 === 0) kernelSize += 1;
+
+    cv.GaussianBlur(gray, background, new cv.Size(kernelSize, kernelSize), 0, 0, cv.BORDER_DEFAULT);
     cv.divide(gray, background, normalized, 255);
-    cv.GaussianBlur(normalized, soft, new cv.Size(3,3), 0, 0, cv.BORDER_DEFAULT);
-    cv.addWeighted(normalized, 1.22, soft, -0.22, 0, sharp);
+
+    // Essay-specific tone curve: push paper toward white while keeping handwriting grayscale detail.
+    normalized.copyTo(toned);
+    const pixels = toned.data;
+    for (let i = 0; i < pixels.length; i++) {
+      const value = pixels[i];
+      let mapped;
+      if (value < 170) {
+        mapped = value * 0.88;
+      } else if (value < 215) {
+        mapped = 150 + (value - 170) * 2.0;
+      } else {
+        mapped = 240 + (value - 215) * (15 / 40);
+      }
+      pixels[i] = Math.max(0, Math.min(255, Math.round(mapped)));
+    }
+
+    // Light unsharp mask: clearer strokes without hard black/white thresholding.
+    cv.GaussianBlur(toned, soft, new cv.Size(3, 3), 0, 0, cv.BORDER_DEFAULT);
+    cv.addWeighted(toned, 1.16, soft, -0.16, 0, sharp);
     return sharp.clone();
   } finally {
-    gray.delete(); background.delete(); normalized.delete(); soft.delete(); sharp.delete();
+    gray.delete();
+    background.delete();
+    normalized.delete();
+    toned.delete();
+    soft.delete();
+    sharp.delete();
   }
 }
 
@@ -287,7 +358,7 @@ function toRgba(mat) {
   return rgba;
 }
 
-async function processImage(payload) {
+async function processImage(payload, reportProgress = () => {}) {
   const cv = self.cv;
   const imageData = new ImageData(new Uint8ClampedArray(payload.buffer), payload.width, payload.height);
   const src = cv.matFromImageData(imageData);
@@ -295,22 +366,33 @@ async function processImage(payload) {
   let rotated = null;
   let final = null;
   let rgba = null;
+
   try {
-    const detected = payload.corners || detectCorners(src);
-    const corners = detected || defaultCorners(src.cols, src.rows);
-    const automatic = !payload.corners && Boolean(detected);
+    reportProgress("detecting");
+    const detection = payload.corners
+      ? {corners: payload.corners, confidence: 1, whiteRatio: 1, areaRatio: 1}
+      : detectCorners(src);
+    const corners = detection.corners || defaultCorners(src.cols, src.rows);
+    const automatic = !payload.corners && Boolean(detection.corners);
     const score = blurScore(src);
 
+    reportProgress("perspective");
     warped = perspective(src, corners);
     rotated = rotate(warped, payload.rotation || 0);
+
+    reportProgress(payload.mode === "enhanced" ? "enhancing" : "rendering");
     final = payload.mode === "enhanced" ? enhance(rotated) : rotated.clone();
     rgba = toRgba(final);
 
+    reportProgress("encoding");
     const bytes = new Uint8ClampedArray(rgba.data.length);
     bytes.set(rgba.data);
     return {
       corners,
       autoDetected: automatic,
+      detectionConfidence: detection.confidence,
+      paperWhiteRatio: detection.whiteRatio,
+      paperAreaRatio: detection.areaRatio,
       blurScore: score,
       width: rgba.cols,
       height: rgba.rows,
@@ -330,7 +412,9 @@ self.onmessage = async event => {
   try {
     await initOpenCV();
     if (action === "process") {
-      const result = await processImage(payload);
+      const result = await processImage(payload, stage => {
+        self.postMessage({id, type:"progress", stage});
+      });
       self.postMessage({id, ok:true, result}, [result.buffer]);
       return;
     }
@@ -338,8 +422,8 @@ self.onmessage = async event => {
       const imageData = new ImageData(new Uint8ClampedArray(payload.buffer), payload.width, payload.height);
       const src = self.cv.matFromImageData(imageData);
       try {
-        const corners = detectCorners(src);
-        self.postMessage({id, ok:true, result:{corners}});
+        const detection = detectCorners(src);
+        self.postMessage({id, ok:true, result:detection});
       } finally {
         src.delete();
       }
