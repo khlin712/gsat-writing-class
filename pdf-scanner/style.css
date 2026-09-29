@@ -44,7 +44,7 @@ h1{margin:0 0 8px;font-size:30px;letter-spacing:-.035em}
 .form-grid label{display:grid;gap:6px;font-size:13px;font-weight:750}
 .form-grid input,.form-grid select{width:100%;border:1px solid #cbd5e1;border-radius:11px;padding:12px;background:white;color:var(--ink);outline:none}
 .form-grid input:focus,.form-grid select:focus{border-color:#475569;box-shadow:0 0 0 3px rgba(71,85,105,.1)}
-.filename{margin-top:12px;padding:10px 12px;border-radius:11px;border:1px solid var(--line);background:var(--soft);font-size:13px;word-break:break-all}
+.filename{margin-top:12px;padding:10px 12px;border-radius:11px;border:1px solid var(--line);background:var(--soft);font-size:13px;word-break:break-all}.review-status{padding:11px 12px;border-radius:11px;background:var(--soft);font-size:13px;line-height:1.55;color:#334155}.review-status.ok{background:#f0fdf4;color:#166534}.review-status.warn{background:#fffbeb;color:#92400e}.review-pages{display:flex;gap:8px;overflow-x:auto;margin-top:10px;padding-bottom:2px}.review-page{flex:0 0 92px;border:1px solid var(--line);border-radius:10px;background:#fff;padding:6px;text-align:left}.review-page img{display:block;width:78px;aspect-ratio:1.414/1;object-fit:contain;background:#eef2f7;border-radius:6px}.review-page span{display:block;margin-top:5px;font-size:11px;color:var(--muted)}.review-page.warn{border-color:#f59e0b;background:#fffbeb}.review-filename{margin-top:10px;font-size:12px;color:var(--muted);word-break:break-all}
 .primary{width:100%;border:0;border-radius:12px;padding:14px 16px;background:var(--primary);color:white;font-weight:800;font-size:16px}
 .primary:disabled{opacity:.45;cursor:not-allowed}
 .only-pdf{text-align:center;font-size:12px;color:var(--muted);margin:9px 0 0}
