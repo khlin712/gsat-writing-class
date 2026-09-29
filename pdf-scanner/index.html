@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#111827">
   <meta name="description" content="國寫作文專用掃描器：自動拉正、文字增強、壓縮並輸出規範命名 PDF。">
   <title>作文 PDF Scanner</title>
-  <link rel="stylesheet" href="./style.css?v=20260929-9">
+  <link rel="stylesheet" href="./style.css?v=20260929-10">
   <script>
     if ("serviceWorker" in navigator) {
       const scannerScope = new URL("./", location.href).href;
@@ -24,7 +24,7 @@
         .catch(() => {});
     }
   </script>
-  <script defer src="./app.js?v=20260929-13"></script>
+  <script defer src="./app.js?v=20260929-14"></script>
 </head>
 <body>
   <main class="app">
@@ -48,6 +48,7 @@
       </div>
       <input id="cameraInput" class="visually-hidden" type="file" accept="image/*" capture="environment">
       <input id="galleryInput" class="visually-hidden" type="file" accept="image/*" multiple>
+      <input id="replaceInput" class="visually-hidden" type="file" accept="image/*" capture="environment">
 
       <div class="privacy-note">所有影像處理都在你的裝置上完成，原始作文不會上傳到本站。</div>
       <div id="engineStatus" class="status">掃描引擎背景準備中，你可以先選擇照片。</div>
@@ -84,8 +85,15 @@
       <div class="filename">檔名預覽：<strong id="filenamePreview">請完整填寫資料</strong></div>
     </section>
 
+    <section class="card" aria-labelledby="review-title">
+      <div class="step-title" id="review-title"><span>3</span>最後檢查</div>
+      <div id="reviewStatus" class="review-status">尚未加入作文頁面</div>
+      <div id="reviewPages" class="review-pages"></div>
+      <div id="reviewFilename" class="review-filename">檔名：尚未完成</div>
+    </section>
+
     <section class="card" aria-labelledby="export-title">
-      <div class="step-title" id="export-title"><span>3</span>輸出 PDF</div>
+      <div class="step-title" id="export-title"><span>4</span>輸出 PDF</div>
       <button id="exportBtn" class="primary" disabled>產生並下載 PDF</button>
       <div id="exportStatus" class="status"></div>
       <p class="only-pdf">只輸出 PDF，不提供 JPG／PNG。</p>
