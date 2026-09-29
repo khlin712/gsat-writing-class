@@ -1,5 +1,5 @@
 const OPENCV_URL = "https://cdn.jsdelivr.net/npm/@techstark/opencv-js@4.10.0-release.1/dist/opencv.js";
-const MAX_OUTPUT_EDGE = 2200;
+const MAX_OUTPUT_EDGE = 3000;
 const ANALYSIS_EDGE = 1000;
 
 let cvReadyPromise = null;
@@ -332,33 +332,36 @@ function enhance(mat) {
   try {
     cv.cvtColor(mat, gray, cv.COLOR_RGBA2GRAY);
 
-    // Estimate local illumination so shadows/yellowish lighting do not turn the page gray.
-    let kernelSize = Math.round(Math.min(gray.rows, gray.cols) / 28);
-    kernelSize = Math.max(31, Math.min(71, kernelSize));
+    // Use a broader local-light estimate so page shadows are removed without erasing thin handwriting.
+    let kernelSize = Math.round(Math.min(gray.rows, gray.cols) / 22);
+    kernelSize = Math.max(41, Math.min(91, kernelSize));
     if (kernelSize % 2 === 0) kernelSize += 1;
 
     cv.GaussianBlur(gray, background, new cv.Size(kernelSize, kernelSize), 0, 0, cv.BORDER_DEFAULT);
     cv.divide(gray, background, normalized, 255);
 
-    // Essay-specific tone curve: push paper toward white while keeping handwriting grayscale detail.
+    // Stronger essay tone curve: deep strokes become darker, paper becomes cleaner white,
+    // while mid-gray antialiasing remains so handwriting does not turn jagged.
     normalized.copyTo(toned);
     const pixels = toned.data;
     for (let i = 0; i < pixels.length; i++) {
       const value = pixels[i];
       let mapped;
-      if (value < 170) {
-        mapped = value * 0.88;
-      } else if (value < 215) {
-        mapped = 150 + (value - 170) * 2.0;
+      if (value < 120) {
+        mapped = value * 0.72;
+      } else if (value < 185) {
+        mapped = 86 + (value - 120) * 0.95;
+      } else if (value < 225) {
+        mapped = 148 + (value - 185) * 2.15;
       } else {
-        mapped = 240 + (value - 215) * (15 / 40);
+        mapped = 234 + (value - 225) * 0.70;
       }
       pixels[i] = Math.max(0, Math.min(255, Math.round(mapped)));
     }
 
-    // Light unsharp mask: clearer strokes without hard black/white thresholding.
+    // Stronger but still controlled unsharp mask for pen/pencil stroke edges.
     cv.GaussianBlur(toned, soft, new cv.Size(3, 3), 0, 0, cv.BORDER_DEFAULT);
-    cv.addWeighted(toned, 1.16, soft, -0.16, 0, sharp);
+    cv.addWeighted(toned, 1.34, soft, -0.34, 0, sharp);
     return sharp.clone();
   } finally {
     gray.delete();
@@ -399,7 +402,8 @@ async function processImage(payload, reportProgress = () => {}) {
 
     reportProgress("perspective");
     warped = perspective(src, corners);
-    rotated = rotate(warped, payload.rotation || 0);
+    const landscapeRotation = payload.preferLandscape && warped.rows > warped.cols ? 90 : 0;
+    rotated = rotate(warped, landscapeRotation + (payload.rotation || 0));
 
     reportProgress(payload.mode === "enhanced" ? "enhancing" : "rendering");
     final = payload.mode === "enhanced" ? enhance(rotated) : rotated.clone();
@@ -414,6 +418,7 @@ async function processImage(payload, reportProgress = () => {}) {
       detectionConfidence: detection.confidence,
       paperWhiteRatio: detection.whiteRatio,
       paperAreaRatio: detection.areaRatio,
+      autoLandscapeRotated: payload.preferLandscape && warped.rows > warped.cols,
       blurScore: score,
       width: rgba.cols,
       height: rgba.rows,
