@@ -403,7 +403,7 @@ async function processPage(page, {detect = false} = {}) {
       mode: page.mode,
       rotation: page.rotation,
       preferLandscape: true
-    }, transfer, 60000, stage => {
+    }, transfer, 75000, stage => {
       page.stage = PROCESS_STAGE_LABELS[stage] || "處理中";
       renderPages();
     });
