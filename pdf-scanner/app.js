@@ -5,7 +5,7 @@ const SOURCE_MAX_EDGE = 3000;
 const JPEG_QUALITY_ENHANCED = 0.94;
 const JPEG_QUALITY_ORIGINAL = 0.92;
 const JSPDF_URL = "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js";
-const WORKER_URL = "./scan-worker.js?v=20260929-6";
+const WORKER_URL = "./scan-worker.js?v=20260929-7";
 
 const state = {
   cvReady: false,
