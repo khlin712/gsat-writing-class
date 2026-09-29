@@ -1,11 +1,11 @@
 const $ = selector => document.querySelector(selector);
 
 const MAX_PAGES = 12;
-const SOURCE_MAX_EDGE = 2200;
-const JPEG_QUALITY_ENHANCED = 0.80;
-const JPEG_QUALITY_ORIGINAL = 0.84;
+const SOURCE_MAX_EDGE = 3000;
+const JPEG_QUALITY_ENHANCED = 0.94;
+const JPEG_QUALITY_ORIGINAL = 0.92;
 const JSPDF_URL = "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js";
-const WORKER_URL = "./scan-worker.js?v=20260929-4";
+const WORKER_URL = "./scan-worker.js?v=20260929-5";
 
 const state = {
   cvReady: false,
@@ -401,7 +401,8 @@ async function processPage(page, {detect = false} = {}) {
       ...payload,
       corners: currentCorners,
       mode: page.mode,
-      rotation: page.rotation
+      rotation: page.rotation,
+      preferLandscape: true
     }, transfer, 60000, stage => {
       page.stage = PROCESS_STAGE_LABELS[stage] || "處理中";
       renderPages();
@@ -412,6 +413,7 @@ async function processPage(page, {detect = false} = {}) {
     page.detectionConfidence = result.detectionConfidence;
     page.paperWhiteRatio = result.paperWhiteRatio;
     page.paperAreaRatio = result.paperAreaRatio;
+    page.autoLandscapeRotated = Boolean(result.autoLandscapeRotated);
     page.blurScore = result.blurScore;
     page.stage = "建立預覽";
     renderPages();
@@ -461,6 +463,7 @@ async function addFiles(fileList) {
     detectionConfidence: null,
     paperWhiteRatio: null,
     paperAreaRatio: null,
+    autoLandscapeRotated: false,
     blurScore: null,
     processedDataUrl: "",
     stage: "等待處理",
@@ -508,7 +511,7 @@ function pageWarnings(page) {
     warnings.push("建議確認四角");
   }
   if (Number.isFinite(page.blurScore) && page.blurScore < 35) warnings.push("照片可能偏糊");
-  if (page.outputWidth > page.outputHeight * 1.12) warnings.push("頁面看起來是橫向");
+  if (page.outputHeight > page.outputWidth * 1.12) warnings.push("頁面看起來是直向");
   return warnings;
 }
 
@@ -527,6 +530,7 @@ function renderPages() {
     const confidenceText = Number.isFinite(page.detectionConfidence)
       ? ` · 邊界信心 ${Math.round(page.detectionConfidence * 100)}%`
       : "";
+    const orientationText = page.outputWidth > page.outputHeight ? " · 橫向" : "";
 
     card.innerHTML = `
       <div class="thumb">
@@ -538,7 +542,7 @@ function renderPages() {
           <span class="badge ${warnings.length ? "warn" : ""}">${page.busy ? (page.stage || "處理中") : page.error ? "處理失敗" : warnings.length ? warnings.join(" · ") : "掃描完成"}</span>
         </div>
         <div class="page-meta">
-          ${page.error ? page.error : page.busy ? `正在${page.stage || "處理"}…` : page.outputWidth ? `${page.outputWidth} × ${page.outputHeight}px${sizeText}${confidenceText}` : "準備中"}
+          ${page.error ? page.error : page.busy ? `正在${page.stage || "處理"}…` : page.outputWidth ? `${page.outputWidth} × ${page.outputHeight}px${sizeText}${confidenceText}${orientationText}` : "準備中"}
         </div>
         <div class="mode-toggle" aria-label="頁面顯示模式">
           <button type="button" data-mode="enhanced" class="${page.mode === "enhanced" ? "active" : ""}">作文清晰</button>
@@ -773,13 +777,13 @@ async function exportPdf() {
 
   try {
     const {jsPDF} = window.jspdf;
-    const pdf = new jsPDF({orientation: "p", unit: "mm", format: "a4", compress: true});
-    const pageW = 210;
-    const pageH = 297;
+    const pdf = new jsPDF({orientation: "l", unit: "mm", format: "a4", compress: true});
+    const pageW = 297;
+    const pageH = 210;
     const margin = 6;
 
     state.pages.forEach((page, index) => {
-      if (index > 0) pdf.addPage("a4", "p");
+      if (index > 0) pdf.addPage("a4", "l");
       const maxW = pageW - margin * 2;
       const maxH = pageH - margin * 2;
       const scale = Math.min(maxW / page.outputWidth, maxH / page.outputHeight);
@@ -907,6 +911,7 @@ async function runBrowserSelfTest() {
     const page = state.pages[0];
     if (!page.processedDataUrl || page.processedDataUrl.length < 1000) throw new Error("掃描結果未產生");
     if (!validCorners(page.corners, page.sourceWidth, page.sourceHeight)) throw new Error("紙張四角無效");
+    if (page.outputWidth <= page.outputHeight) throw new Error("作文預設應為橫向");
 
     page.rotation = 90;
     await processPage(page);
@@ -931,8 +936,8 @@ async function runBrowserSelfTest() {
     if (!pdfReady) throw new Error("PDF 引擎載入失敗");
 
     const {jsPDF} = window.jspdf;
-    const pdf = new jsPDF({orientation: "p", unit: "mm", format: "a4", compress: true});
-    pdf.addImage(page.processedDataUrl, "JPEG", 8, 8, 194, 274, undefined, "FAST");
+    const pdf = new jsPDF({orientation: "l", unit: "mm", format: "a4", compress: true});
+    pdf.addImage(page.processedDataUrl, "JPEG", 8, 8, 281, 194, undefined, "FAST");
     const pdfBytes = pdf.output("arraybuffer").byteLength;
     if (pdfBytes < 1000) throw new Error("PDF 產出異常");
 
