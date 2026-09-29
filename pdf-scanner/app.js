@@ -19,6 +19,8 @@ const state = {
   editorSource: null,
   editorCorners: null,
   draggingCorner: null,
+  dragPageId: null,
+  previewScale: 1,
   enginePromise: null,
   pdfPromise: null
 };
@@ -33,6 +35,15 @@ const cropDialog = $("#cropDialog");
 const cropCanvas = $("#cropCanvas");
 const redetectBtn = $("#redetectBtn");
 const saveCropBtn = $("#saveCropBtn");
+const cropMagnifier = $("#cropMagnifier");
+const previewDialog = $("#previewDialog");
+const previewImage = $("#previewImage");
+const previewTitle = $("#previewTitle");
+const previewViewport = $("#previewViewport");
+const zoomOutBtn = $("#zoomOutBtn");
+const zoomInBtn = $("#zoomInBtn");
+const zoomResetBtn = $("#zoomResetBtn");
+const zoomLabel = $("#zoomLabel");
 
 function cloneCorners(corners) {
   return corners ? {
@@ -333,6 +344,65 @@ async function loadFileToCanvas(file, maxEdge = SOURCE_MAX_EDGE) {
   }
 }
 
+function rotateCanvas(source, degrees) {
+  const turns = ((degrees % 360) + 360) % 360;
+  if (!turns) return source;
+
+  const swap = turns === 90 || turns === 270;
+  const canvas = document.createElement("canvas");
+  canvas.width = swap ? source.height : source.width;
+  canvas.height = swap ? source.width : source.height;
+  const ctx = canvas.getContext("2d", {alpha: false});
+  ctx.fillStyle = "#fff";
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  ctx.rotate(turns * Math.PI / 180);
+  ctx.drawImage(source, -source.width / 2, -source.height / 2);
+  return canvas;
+}
+
+async function useSourceAsPage(page) {
+  page.busy = true;
+  page.stage = "建立原圖備援";
+  state.processing++;
+  renderPages();
+  updateExportState();
+
+  try {
+    const source = await loadFileToCanvas(page.file);
+    page.sourceWidth = source.width;
+    page.sourceHeight = source.height;
+    const landscapeRotation = source.height > source.width ? 90 : 0;
+    const finalCanvas = rotateCanvas(source, landscapeRotation + (page.rotation || 0));
+
+    page.mode = "original";
+    page.corners = defaultCorners(source.width, source.height);
+    page.autoDetected = false;
+    page.detectionConfidence = null;
+    page.paperWhiteRatio = null;
+    page.paperAreaRatio = null;
+    page.autoLandscapeRotated = Boolean(landscapeRotation);
+    page.blurScore = null;
+    page.processedDataUrl = finalCanvas.toDataURL("image/jpeg", JPEG_QUALITY_ORIGINAL);
+    page.outputWidth = finalCanvas.width;
+    page.outputHeight = finalCanvas.height;
+    page.outputBytes = dataUrlBytes(page.processedDataUrl);
+    page.fallbackUsed = true;
+    page.error = "";
+    setEngineStatus("已使用原圖備援；建議放大預覽確認後再輸出。", "warn");
+  } catch (error) {
+    console.error(error);
+    page.error = error.message || "原圖備援也無法建立";
+    page.processedDataUrl = "";
+  } finally {
+    page.busy = false;
+    page.stage = "";
+    state.processing--;
+    renderPages();
+    updateExportState();
+  }
+}
+
 function defaultCorners(width, height) {
   const insetX = Math.round(width * 0.01);
   const insetY = Math.round(height * 0.01);
@@ -424,6 +494,7 @@ async function processPage(page, {detect = false} = {}) {
     page.outputWidth = finalCanvas.width;
     page.outputHeight = finalCanvas.height;
     page.outputBytes = dataUrlBytes(page.processedDataUrl);
+    page.fallbackUsed = false;
     page.error = "";
   } catch (error) {
     console.error(error);
@@ -464,6 +535,7 @@ async function addFiles(fileList) {
     paperWhiteRatio: null,
     paperAreaRatio: null,
     autoLandscapeRotated: false,
+    fallbackUsed: false,
     blurScore: null,
     processedDataUrl: "",
     stage: "等待處理",
@@ -498,14 +570,16 @@ async function addFiles(fileList) {
 
   const failed = state.pages.filter(page => page.error).length;
   setEngineStatus(
-    failed ? `已加入頁面，但有 ${failed} 頁處理失敗，請刪除後重拍或重新加入。` : `完成，目前共 ${state.pages.length} 頁。`,
+    failed ? `有 ${failed} 頁處理失敗，可按「重新處理」或「直接使用原圖」。` : `完成，目前共 ${state.pages.length} 頁。`,
     failed ? "warn" : "ok"
   );
 }
 
 function pageWarnings(page) {
   const warnings = [];
-  if (!page.autoDetected) {
+  if (page.fallbackUsed) {
+    warnings.push("使用原圖備援");
+  } else if (!page.autoDetected) {
     warnings.push("請確認四角");
   } else if (Number.isFinite(page.detectionConfidence) && page.detectionConfidence < 0.72) {
     warnings.push("建議確認四角");
@@ -525,6 +599,8 @@ function renderPages() {
   state.pages.forEach((page, index) => {
     const card = document.createElement("article");
     card.className = "page-card";
+    card.dataset.pageId = page.id;
+    card.draggable = !page.busy;
     const warnings = pageWarnings(page);
     const sizeText = page.outputBytes ? ` · 約 ${humanBytes(page.outputBytes)}` : "";
     const confidenceText = Number.isFinite(page.detectionConfidence)
@@ -533,7 +609,7 @@ function renderPages() {
     const orientationText = page.outputWidth > page.outputHeight ? " · 橫向" : "";
 
     card.innerHTML = `
-      <div class="thumb">
+      <div class="thumb ${page.processedDataUrl ? "clickable" : ""}" data-act="${page.processedDataUrl ? "preview" : ""}">
         ${page.processedDataUrl ? `<img src="${page.processedDataUrl}" alt="第 ${index + 1} 頁預覽">` : page.busy ? (page.stage || "處理中…") : page.error ? "處理失敗" : "準備中"}
       </div>
       <div>
@@ -549,9 +625,10 @@ function renderPages() {
           <button type="button" data-mode="original" class="${page.mode === "original" ? "active" : ""}">原稿</button>
         </div>
         <div class="page-actions">
+          ${page.processedDataUrl ? '<button type="button" data-act="preview">放大檢查</button>' : ""}
           <button type="button" data-act="crop" ${page.busy ? "disabled" : ""}>調整四角</button>
           <button type="button" data-act="rotate" ${page.busy ? "disabled" : ""}>右轉 90°</button>
-          ${page.error ? '<button type="button" data-act="retry">重新處理</button>' : ""}
+          ${page.error ? '<button type="button" data-act="retry">重新處理</button><button type="button" data-act="source">直接使用原圖</button>' : ""}
           <button type="button" data-act="up" ${index === 0 ? "disabled" : ""}>上移</button>
           <button type="button" data-act="down" ${index === state.pages.length - 1 ? "disabled" : ""}>下移</button>
           <button type="button" data-act="delete" class="danger">刪除</button>
@@ -559,14 +636,21 @@ function renderPages() {
       </div>
     `;
 
+    card.querySelectorAll('[data-act="preview"]').forEach(element => {
+      element.onclick = () => openPreview(page, index);
+    });
     card.querySelector('[data-act="crop"]').onclick = () => openCropEditor(page.id);
     card.querySelector('[data-act="rotate"]').onclick = async () => {
       page.rotation = (page.rotation + 90) % 360;
-      await processPage(page);
+      if (page.fallbackUsed) await useSourceAsPage(page);
+      else await processPage(page);
     };
     card.querySelector('[data-act="up"]').onclick = () => movePage(index, -1);
     card.querySelector('[data-act="down"]').onclick = () => movePage(index, 1);
     card.querySelector('[data-act="delete"]').onclick = () => deletePage(index);
+    const sourceButton = card.querySelector('[data-act="source"]');
+    if (sourceButton) sourceButton.onclick = async () => useSourceAsPage(page);
+
     const retryButton = card.querySelector('[data-act="retry"]');
     if (retryButton) {
       retryButton.onclick = async () => {
@@ -584,9 +668,74 @@ function renderPages() {
       };
     });
 
+    card.addEventListener("dragstart", event => {
+      if (page.busy) {
+        event.preventDefault();
+        return;
+      }
+      state.dragPageId = page.id;
+      card.classList.add("dragging");
+      if (event.dataTransfer) event.dataTransfer.effectAllowed = "move";
+    });
+    card.addEventListener("dragend", () => {
+      state.dragPageId = null;
+      card.classList.remove("dragging");
+      document.querySelectorAll(".page-card.drag-over").forEach(item => item.classList.remove("drag-over"));
+    });
+    card.addEventListener("dragover", event => {
+      if (!state.dragPageId || state.dragPageId === page.id) return;
+      event.preventDefault();
+      card.classList.add("drag-over");
+    });
+    card.addEventListener("dragleave", () => card.classList.remove("drag-over"));
+    card.addEventListener("drop", event => {
+      event.preventDefault();
+      card.classList.remove("drag-over");
+      const from = state.pages.findIndex(item => item.id === state.dragPageId);
+      const to = state.pages.findIndex(item => item.id === page.id);
+      if (from < 0 || to < 0 || from === to) return;
+      const [moved] = state.pages.splice(from, 1);
+      state.pages.splice(to, 0, moved);
+      state.dragPageId = null;
+      renderPages();
+    });
+
     pagesEl.appendChild(card);
   });
 }
+
+function applyPreviewScale() {
+  state.previewScale = Math.max(1, Math.min(4, state.previewScale));
+  previewImage.style.width = `${state.previewScale * 100}%`;
+  zoomLabel.textContent = `${Math.round(state.previewScale * 100)}%`;
+}
+
+function openPreview(page, index) {
+  if (!page?.processedDataUrl) return;
+  state.previewScale = 1;
+  previewTitle.textContent = `第 ${index + 1} 頁｜放大檢查字跡`;
+  previewImage.src = page.processedDataUrl;
+  applyPreviewScale();
+  previewViewport.scrollTo({top: 0, left: 0});
+  previewDialog.showModal();
+}
+
+zoomInBtn.addEventListener("click", () => {
+  state.previewScale += 0.5;
+  applyPreviewScale();
+});
+zoomOutBtn.addEventListener("click", () => {
+  state.previewScale -= 0.5;
+  applyPreviewScale();
+});
+zoomResetBtn.addEventListener("click", () => {
+  state.previewScale = 1;
+  applyPreviewScale();
+});
+previewDialog.addEventListener("close", () => {
+  previewImage.removeAttribute("src");
+  state.previewScale = 1;
+});
 
 function movePage(index, delta) {
   const next = index + delta;
@@ -622,7 +771,7 @@ function drawCropEditor() {
   ctx.fill();
   ctx.stroke();
 
-  const radius = Math.max(12, cropCanvas.width / 80);
+  const radius = Math.max(18, cropCanvas.width / 55);
   for (const point of points) {
     ctx.beginPath();
     ctx.arc(point.x, point.y, radius, 0, Math.PI * 2);
@@ -660,11 +809,43 @@ function nearestCorner(position) {
   return bestDistance <= threshold ? best : null;
 }
 
+function drawCropMagnifier(position) {
+  if (!state.editorSource || !position || !cropMagnifier) return;
+  const rect = cropCanvas.getBoundingClientRect();
+  const displayScale = cropCanvas.width / Math.max(1, rect.width);
+  const zoom = 3;
+  const sampleSize = (cropMagnifier.width * displayScale) / zoom;
+  const sx = Math.max(0, Math.min(state.editorSource.width - sampleSize, position.x - sampleSize / 2));
+  const sy = Math.max(0, Math.min(state.editorSource.height - sampleSize, position.y - sampleSize / 2));
+  const ctx = cropMagnifier.getContext("2d");
+  ctx.clearRect(0, 0, cropMagnifier.width, cropMagnifier.height);
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(
+    state.editorSource,
+    sx, sy, sampleSize, sampleSize,
+    0, 0, cropMagnifier.width, cropMagnifier.height
+  );
+  ctx.strokeStyle = "#ef4444";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(cropMagnifier.width / 2, 0);
+  ctx.lineTo(cropMagnifier.width / 2, cropMagnifier.height);
+  ctx.moveTo(0, cropMagnifier.height / 2);
+  ctx.lineTo(cropMagnifier.width, cropMagnifier.height / 2);
+  ctx.stroke();
+  cropMagnifier.classList.add("visible");
+}
+
+function hideCropMagnifier() {
+  if (cropMagnifier) cropMagnifier.classList.remove("visible");
+}
+
 cropCanvas.addEventListener("pointerdown", event => {
   if (!state.editorCorners) return;
   const key = nearestCorner(pointerPosition(event));
   if (!key) return;
   state.draggingCorner = key;
+  drawCropMagnifier(pointerPosition(event));
   cropCanvas.setPointerCapture(event.pointerId);
   event.preventDefault();
 });
@@ -677,12 +858,14 @@ cropCanvas.addEventListener("pointermove", event => {
     y: Math.max(0, Math.min(cropCanvas.height, pos.y))
   };
   drawCropEditor();
+  drawCropMagnifier(pos);
   event.preventDefault();
 });
 
 function endCornerDrag(event) {
   if (!state.draggingCorner) return;
   state.draggingCorner = null;
+  hideCropMagnifier();
   if (event.pointerId !== undefined && cropCanvas.hasPointerCapture(event.pointerId)) {
     cropCanvas.releasePointerCapture(event.pointerId);
   }
@@ -757,6 +940,7 @@ cropDialog.addEventListener("close", () => {
   state.editorSource = null;
   state.editorCorners = null;
   state.draggingCorner = null;
+  hideCropMagnifier();
 });
 
 async function exportPdf() {
