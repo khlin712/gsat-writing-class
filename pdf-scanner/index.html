@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#111827">
   <meta name="description" content="國寫作文專用掃描器：自動拉正、文字增強、壓縮並輸出規範命名 PDF。">
   <title>作文 PDF Scanner</title>
-  <link rel="stylesheet" href="./style.css?v=20260929-7">
+  <link rel="stylesheet" href="./style.css?v=20260929-8">
   <script>
     if ("serviceWorker" in navigator) {
       const scannerScope = new URL("./", location.href).href;
@@ -24,7 +24,7 @@
         .catch(() => {});
     }
   </script>
-  <script defer src="./app.js?v=20260929-11"></script>
+  <script defer src="./app.js?v=20260929-12"></script>
 </head>
 <body>
   <main class="app">
@@ -103,12 +103,31 @@
       </div>
       <div class="canvas-wrap">
         <canvas id="cropCanvas" aria-label="紙張四角調整區"></canvas>
+        <canvas id="cropMagnifier" width="160" height="160" aria-hidden="true"></canvas>
       </div>
       <div class="crop-actions">
         <button id="redetectBtn" type="button">重新自動偵測</button>
         <span class="spacer"></span>
         <button value="cancel">取消</button>
         <button id="saveCropBtn" type="button" class="primary-inline">套用裁切</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="previewDialog" class="preview-dialog">
+    <form method="dialog" class="preview-panel">
+      <div class="preview-head">
+        <strong id="previewTitle">作文預覽</strong>
+        <button value="cancel" class="icon-button" aria-label="關閉預覽">✕</button>
+      </div>
+      <div id="previewViewport" class="preview-viewport">
+        <img id="previewImage" alt="作文放大預覽">
+      </div>
+      <div class="preview-actions">
+        <button id="zoomOutBtn" type="button" aria-label="縮小">－</button>
+        <span id="zoomLabel">100%</span>
+        <button id="zoomInBtn" type="button" aria-label="放大">＋</button>
+        <button id="zoomResetBtn" type="button">適合畫面</button>
       </div>
     </form>
   </dialog>
