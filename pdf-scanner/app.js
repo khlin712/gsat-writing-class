@@ -1,6 +1,6 @@
 const $ = selector => document.querySelector(selector);
 
-const MAX_PAGES = 12;
+const MAX_PAGES = 5;
 const SOURCE_MAX_EDGE = 3000;
 const JPEG_QUALITY_ENHANCED = 0.94;
 const JPEG_QUALITY_ORIGINAL = 0.92;
@@ -21,12 +21,14 @@ const state = {
   draggingCorner: null,
   dragPageId: null,
   previewScale: 1,
+  replacePageId: null,
   enginePromise: null,
   pdfPromise: null
 };
 
 const cameraInput = $("#cameraInput");
 const galleryInput = $("#galleryInput");
+const replaceInput = $("#replaceInput");
 const pagesEl = $("#pages");
 const engineStatus = $("#engineStatus");
 const exportBtn = $("#exportBtn");
@@ -44,6 +46,9 @@ const zoomOutBtn = $("#zoomOutBtn");
 const zoomInBtn = $("#zoomInBtn");
 const zoomResetBtn = $("#zoomResetBtn");
 const zoomLabel = $("#zoomLabel");
+const reviewStatus = $("#reviewStatus");
+const reviewPages = $("#reviewPages");
+const reviewFilename = $("#reviewFilename");
 
 function cloneCorners(corners) {
   return corners ? {
@@ -88,6 +93,7 @@ function currentFilename() {
 function updateFilename() {
   $("#filenamePreview").textContent = currentFilename() || "請完整填寫資料";
   updateExportState();
+  renderFinalReview();
 }
 
 function updateExportState() {
@@ -344,65 +350,6 @@ async function loadFileToCanvas(file, maxEdge = SOURCE_MAX_EDGE) {
   }
 }
 
-function rotateCanvas(source, degrees) {
-  const turns = ((degrees % 360) + 360) % 360;
-  if (!turns) return source;
-
-  const swap = turns === 90 || turns === 270;
-  const canvas = document.createElement("canvas");
-  canvas.width = swap ? source.height : source.width;
-  canvas.height = swap ? source.width : source.height;
-  const ctx = canvas.getContext("2d", {alpha: false});
-  ctx.fillStyle = "#fff";
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.translate(canvas.width / 2, canvas.height / 2);
-  ctx.rotate(turns * Math.PI / 180);
-  ctx.drawImage(source, -source.width / 2, -source.height / 2);
-  return canvas;
-}
-
-async function useSourceAsPage(page) {
-  page.busy = true;
-  page.stage = "建立原圖備援";
-  state.processing++;
-  renderPages();
-  updateExportState();
-
-  try {
-    const source = await loadFileToCanvas(page.file);
-    page.sourceWidth = source.width;
-    page.sourceHeight = source.height;
-    const landscapeRotation = source.height > source.width ? 90 : 0;
-    const finalCanvas = rotateCanvas(source, landscapeRotation + (page.rotation || 0));
-
-    page.mode = "original";
-    page.corners = defaultCorners(source.width, source.height);
-    page.autoDetected = false;
-    page.detectionConfidence = null;
-    page.paperWhiteRatio = null;
-    page.paperAreaRatio = null;
-    page.autoLandscapeRotated = Boolean(landscapeRotation);
-    page.blurScore = null;
-    page.processedDataUrl = finalCanvas.toDataURL("image/jpeg", JPEG_QUALITY_ORIGINAL);
-    page.outputWidth = finalCanvas.width;
-    page.outputHeight = finalCanvas.height;
-    page.outputBytes = dataUrlBytes(page.processedDataUrl);
-    page.fallbackUsed = true;
-    page.error = "";
-    setEngineStatus("已使用原圖備援；建議放大預覽確認後再輸出。", "warn");
-  } catch (error) {
-    console.error(error);
-    page.error = error.message || "原圖備援也無法建立";
-    page.processedDataUrl = "";
-  } finally {
-    page.busy = false;
-    page.stage = "";
-    state.processing--;
-    renderPages();
-    updateExportState();
-  }
-}
-
 function defaultCorners(width, height) {
   const insetX = Math.round(width * 0.01);
   const insetY = Math.round(height * 0.01);
@@ -494,7 +441,6 @@ async function processPage(page, {detect = false} = {}) {
     page.outputWidth = finalCanvas.width;
     page.outputHeight = finalCanvas.height;
     page.outputBytes = dataUrlBytes(page.processedDataUrl);
-    page.fallbackUsed = false;
     page.error = "";
   } catch (error) {
     console.error(error);
@@ -535,7 +481,6 @@ async function addFiles(fileList) {
     paperWhiteRatio: null,
     paperAreaRatio: null,
     autoLandscapeRotated: false,
-    fallbackUsed: false,
     blurScore: null,
     processedDataUrl: "",
     stage: "等待處理",
@@ -570,16 +515,14 @@ async function addFiles(fileList) {
 
   const failed = state.pages.filter(page => page.error).length;
   setEngineStatus(
-    failed ? `有 ${failed} 頁處理失敗，可按「重新處理」或「直接使用原圖」。` : `完成，目前共 ${state.pages.length} 頁。`,
+    failed ? `有 ${failed} 頁處理失敗，請重新處理或重新拍攝。` : `完成，目前共 ${state.pages.length} 頁。`,
     failed ? "warn" : "ok"
   );
 }
 
 function pageWarnings(page) {
   const warnings = [];
-  if (page.fallbackUsed) {
-    warnings.push("使用原圖備援");
-  } else if (!page.autoDetected) {
+  if (!page.autoDetected) {
     warnings.push("請確認四角");
   } else if (Number.isFinite(page.detectionConfidence) && page.detectionConfidence < 0.72) {
     warnings.push("建議確認四角");
@@ -593,6 +536,7 @@ function renderPages() {
   pagesEl.innerHTML = "";
   if (!state.pages.length) {
     pagesEl.innerHTML = '<div class="empty">尚未加入作文頁面</div>';
+    renderFinalReview();
     return;
   }
 
@@ -602,11 +546,7 @@ function renderPages() {
     card.dataset.pageId = page.id;
     card.draggable = !page.busy;
     const warnings = pageWarnings(page);
-    const sizeText = page.outputBytes ? ` · 約 ${humanBytes(page.outputBytes)}` : "";
-    const confidenceText = Number.isFinite(page.detectionConfidence)
-      ? ` · 邊界信心 ${Math.round(page.detectionConfidence * 100)}%`
-      : "";
-    const orientationText = page.outputWidth > page.outputHeight ? " · 橫向" : "";
+    const orientationText = page.outputWidth > page.outputHeight ? "橫向" : "請檢查方向";
 
     card.innerHTML = `
       <div class="thumb ${page.processedDataUrl ? "clickable" : ""}" data-act="${page.processedDataUrl ? "preview" : ""}">
@@ -618,7 +558,7 @@ function renderPages() {
           <span class="badge ${warnings.length ? "warn" : ""}">${page.busy ? (page.stage || "處理中") : page.error ? "處理失敗" : warnings.length ? warnings.join(" · ") : "掃描完成"}</span>
         </div>
         <div class="page-meta">
-          ${page.error ? page.error : page.busy ? `正在${page.stage || "處理"}…` : page.outputWidth ? `${page.outputWidth} × ${page.outputHeight}px${sizeText}${confidenceText}${orientationText}` : "準備中"}
+          ${page.error ? page.error : page.busy ? `正在${page.stage || "處理"}…` : page.outputWidth ? `已完成 · ${orientationText}` : "準備中"}
         </div>
         <div class="mode-toggle" aria-label="頁面顯示模式">
           <button type="button" data-mode="enhanced" class="${page.mode === "enhanced" ? "active" : ""}">作文清晰</button>
@@ -628,7 +568,7 @@ function renderPages() {
           ${page.processedDataUrl ? '<button type="button" data-act="preview">放大檢查</button>' : ""}
           <button type="button" data-act="crop" ${page.busy ? "disabled" : ""}>調整四角</button>
           <button type="button" data-act="rotate" ${page.busy ? "disabled" : ""}>右轉 90°</button>
-          ${page.error ? '<button type="button" data-act="retry">重新處理</button><button type="button" data-act="source">直接使用原圖</button>' : ""}
+          ${page.error ? '<button type="button" data-act="retry">重新處理</button><button type="button" data-act="retake">重新拍攝</button>' : ""}
           <button type="button" data-act="up" ${index === 0 ? "disabled" : ""}>上移</button>
           <button type="button" data-act="down" ${index === state.pages.length - 1 ? "disabled" : ""}>下移</button>
           <button type="button" data-act="delete" class="danger">刪除</button>
@@ -642,14 +582,18 @@ function renderPages() {
     card.querySelector('[data-act="crop"]').onclick = () => openCropEditor(page.id);
     card.querySelector('[data-act="rotate"]').onclick = async () => {
       page.rotation = (page.rotation + 90) % 360;
-      if (page.fallbackUsed) await useSourceAsPage(page);
-      else await processPage(page);
+      await processPage(page);
     };
     card.querySelector('[data-act="up"]').onclick = () => movePage(index, -1);
     card.querySelector('[data-act="down"]').onclick = () => movePage(index, 1);
     card.querySelector('[data-act="delete"]').onclick = () => deletePage(index);
-    const sourceButton = card.querySelector('[data-act="source"]');
-    if (sourceButton) sourceButton.onclick = async () => useSourceAsPage(page);
+    const retakeButton = card.querySelector('[data-act="retake"]');
+    if (retakeButton) {
+      retakeButton.onclick = () => {
+        state.replacePageId = page.id;
+        replaceInput.click();
+      };
+    }
 
     const retryButton = card.querySelector('[data-act="retry"]');
     if (retryButton) {
@@ -701,6 +645,50 @@ function renderPages() {
     });
 
     pagesEl.appendChild(card);
+  });
+  renderFinalReview();
+}
+
+function renderFinalReview() {
+  if (!reviewStatus || !reviewPages || !reviewFilename) return;
+
+  reviewPages.innerHTML = "";
+  const filename = currentFilename();
+  reviewFilename.textContent = filename ? `檔名：${filename}` : "檔名：請先完整填寫交件資料";
+
+  if (!state.pages.length) {
+    reviewStatus.textContent = "尚未加入作文頁面";
+    reviewStatus.className = "review-status";
+    return;
+  }
+
+  const unfinished = state.pages.filter(page => page.busy || page.error || !page.processedDataUrl);
+  const warningPages = state.pages
+    .map((page, index) => ({page, index, warnings: pageWarnings(page)}))
+    .filter(item => item.warnings.length);
+
+  if (unfinished.length) {
+    reviewStatus.textContent = `尚有 ${unfinished.length} 頁未完成，請先重新處理或重新拍攝。`;
+    reviewStatus.className = "review-status warn";
+  } else if (warningPages.length) {
+    reviewStatus.textContent = `共 ${state.pages.length} 頁；有 ${warningPages.length} 頁需要你再確認。`;
+    reviewStatus.className = "review-status warn";
+  } else {
+    reviewStatus.textContent = `✓ 共 ${state.pages.length} 頁，影像與頁面順序已可輸出。`;
+    reviewStatus.className = "review-status ok";
+  }
+
+  state.pages.forEach((page, index) => {
+    const warnings = pageWarnings(page);
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = `review-page ${warnings.length || page.error ? "warn" : ""}`;
+    button.disabled = !page.processedDataUrl;
+    button.innerHTML = page.processedDataUrl
+      ? `<img src="${page.processedDataUrl}" alt="第 ${index + 1} 頁最後檢查"><span>第 ${index + 1} 頁${warnings.length ? " · 請確認" : " · ✓"}</span>`
+      : `<span>第 ${index + 1} 頁 · 尚未完成</span>`;
+    if (page.processedDataUrl) button.onclick = () => openPreview(page, index);
+    reviewPages.appendChild(button);
   });
 }
 
@@ -1003,6 +991,29 @@ cameraInput.addEventListener("change", async event => {
 galleryInput.addEventListener("change", async event => {
   await addFiles(event.target.files);
   event.target.value = "";
+});
+replaceInput.addEventListener("change", async event => {
+  const file = event.target.files?.[0];
+  const page = state.pages.find(item => item.id === state.replacePageId);
+  state.replacePageId = null;
+  event.target.value = "";
+  if (!file || !page) return;
+
+  page.file = file;
+  page.rotation = 0;
+  page.corners = null;
+  page.autoDetected = false;
+  page.detectionConfidence = null;
+  page.paperWhiteRatio = null;
+  page.paperAreaRatio = null;
+  page.autoLandscapeRotated = false;
+  page.blurScore = null;
+  page.processedDataUrl = "";
+  page.outputWidth = null;
+  page.outputHeight = null;
+  page.outputBytes = null;
+  page.error = "";
+  await processPage(page, {detect: true});
 });
 
 $("#className").addEventListener("input", event => {
