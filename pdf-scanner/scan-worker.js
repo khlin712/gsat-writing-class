@@ -719,12 +719,95 @@ function gridStraightnessScore(mat) {
   }
 }
 
+
+function dominantSkewAngle(mat) {
+  const cv = self.cv;
+  const scale = Math.min(1, 800 / Math.max(mat.cols, mat.rows));
+  const small = new cv.Mat();
+  const gray = new cv.Mat();
+  const edges = new cv.Mat();
+  const lines = new cv.Mat();
+
+  try {
+    cv.resize(
+      mat,
+      small,
+      new cv.Size(Math.max(1, Math.round(mat.cols * scale)), Math.max(1, Math.round(mat.rows * scale))),
+      0, 0, cv.INTER_AREA
+    );
+    cv.cvtColor(small, gray, cv.COLOR_RGBA2GRAY);
+    cv.Canny(gray, edges, 50, 130);
+    cv.HoughLinesP(edges, lines, 1, Math.PI / 360, 45, Math.max(65, small.cols * 0.09), 12);
+
+    const data = lines.data32S || [];
+    const samples = [];
+    for (let i = 0; i + 3 < data.length; i += 4) {
+      const x1 = data[i], y1 = data[i + 1], x2 = data[i + 2], y2 = data[i + 3];
+      const dx = x2 - x1, dy = y2 - y1;
+      const length = Math.hypot(dx, dy);
+      let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+      while (angle > 90) angle -= 180;
+      while (angle < -90) angle += 180;
+
+      let deviation = null;
+      if (Math.abs(angle) <= 12) deviation = angle;
+      else if (Math.abs(angle) >= 78) deviation = angle > 0 ? angle - 90 : angle + 90;
+      if (deviation !== null) samples.push({value: deviation, weight: Math.max(1, length)});
+    }
+    if (samples.length < 5) return 0;
+
+    samples.sort((a, b) => a.value - b.value);
+    const total = samples.reduce((sum, item) => sum + item.weight, 0);
+    let cumulative = 0;
+    for (const item of samples) {
+      cumulative += item.weight;
+      if (cumulative >= total / 2) return item.value;
+    }
+    return 0;
+  } catch (_) {
+    return 0;
+  } finally {
+    small.delete(); gray.delete(); edges.delete(); lines.delete();
+  }
+}
+
+function fineDeskew(mat, angle) {
+  const cv = self.cv;
+  if (!Number.isFinite(angle) || Math.abs(angle) < 0.25 || Math.abs(angle) > 3.0) return null;
+  const matrix = cv.getRotationMatrix2D(new cv.Point(mat.cols / 2, mat.rows / 2), -angle, 1);
+  const out = new cv.Mat();
+  try {
+    cv.warpAffine(
+      mat, out, matrix, new cv.Size(mat.cols, mat.rows),
+      cv.INTER_CUBIC, cv.BORDER_CONSTANT, new cv.Scalar(255,255,255,255)
+    );
+    return out.clone();
+  } catch (_) {
+    return null;
+  } finally {
+    matrix.delete();
+    out.delete();
+  }
+}
+
 function chooseAutomaticWarp(src, detection, foldGeometry) {
   const candidates = [];
 
   const fallbackCorners = defaultCorners(src.cols, src.rows);
   const fallback = perspective(src, fallbackCorners);
-  candidates.push({kind: "fallback", mat: fallback, score: gridStraightnessScore(fallback), corners: fallbackCorners});
+  const fallbackScore = gridStraightnessScore(fallback);
+  candidates.push({kind: "fallback", mat: fallback, score: fallbackScore, corners: fallbackCorners});
+
+  const skewAngle = dominantSkewAngle(fallback);
+  const deskewed = fineDeskew(fallback, skewAngle);
+  if (deskewed) {
+    candidates.push({
+      kind: "deskew",
+      mat: deskewed,
+      score: gridStraightnessScore(deskewed),
+      corners: fallbackCorners
+    });
+  }
 
   if (detection.corners) {
     const standard = perspective(src, detection.corners);
@@ -755,6 +838,11 @@ function chooseAutomaticWarp(src, detection, foldGeometry) {
   for (const candidate of candidates) {
     if (candidate.kind === "fallback") continue;
     const improvement = fallbackCandidate.score - candidate.score;
+
+    if (candidate.kind === "deskew") {
+      if (improvement >= 0.20 && candidate.score < best.score) best = candidate;
+      continue;
+    }
 
     if (candidate.kind === "fold") {
       const needed = foldGeometry?.score > 25 ? 0.60 : 0.25;
