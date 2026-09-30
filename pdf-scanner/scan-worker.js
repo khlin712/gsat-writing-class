@@ -295,6 +295,7 @@ function detectCorners(src) {
     const chosen = edgeReliable ? bestEdge : best;
     return {
       corners: edgeReliable ? bestEdge.corners : null,
+      candidateCorners: chosen.corners,
       confidence: chosen.confidence,
       whiteRatio: chosen.whiteRatio,
       areaRatio: chosen.areaRatio
@@ -335,6 +336,282 @@ function blurScore(src) {
     return null;
   } finally {
     small.delete(); gray.delete(); lap.delete(); mean.delete(); stddev.delete();
+  }
+}
+
+
+function percentile(values, q) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  const pos = Math.max(0, Math.min(sorted.length - 1, Math.round((sorted.length - 1) * q)));
+  return sorted[pos];
+}
+
+function weightedLineFit(points) {
+  if (!points || points.length < 20) return null;
+  let work = points.slice();
+  const scoreCut = percentile(work.map(p => p.score), 0.60);
+  work = work.filter(p => p.score >= scoreCut);
+  if (work.length < 20) return null;
+
+  let a = 0;
+  let b = 0;
+  for (let iter = 0; iter < 4; iter++) {
+    let sw = 0, sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (const p of work) {
+      const weight = Math.sqrt(Math.max(1, p.score));
+      sw += weight;
+      sx += weight * p.x;
+      sy += weight * p.y;
+      sxx += weight * p.x * p.x;
+      sxy += weight * p.x * p.y;
+    }
+    const denom = sw * sxx - sx * sx;
+    if (Math.abs(denom) < 1e-6) return null;
+    a = (sw * sxy - sx * sy) / denom;
+    b = (sy - a * sx) / sw;
+
+    const residuals = work.map(p => Math.abs(p.y - (a * p.x + b)));
+    const med = percentile(residuals, 0.5);
+    const limit = Math.max(4, med * 2.5);
+    const filtered = work.filter((p, i) => residuals[i] < limit);
+    if (filtered.length < 15 || filtered.length === work.length) break;
+    work = filtered;
+  }
+
+  let sumSq = 0;
+  for (const p of work) {
+    const r = p.y - (a * p.x + b);
+    sumSq += r * r;
+  }
+  return {a, b, rms: Math.sqrt(sumSq / Math.max(1, work.length)), count: work.length};
+}
+
+function lineXofY(p1, p2) {
+  const dy = p2.y - p1.y;
+  if (Math.abs(dy) < 1e-6) return {c: 0, d: (p1.x + p2.x) / 2};
+  const c = (p2.x - p1.x) / dy;
+  return {c, d: p1.x - c * p1.y};
+}
+
+function intersectHorizontalVertical(horizontal, vertical) {
+  const denom = 1 - horizontal.a * vertical.c;
+  if (Math.abs(denom) < 1e-6) return null;
+  const y = (horizontal.a * vertical.d + horizontal.b) / denom;
+  const x = vertical.c * y + vertical.d;
+  return {x, y};
+}
+
+function detectFoldGeometry(src, coarseCorners) {
+  if (!coarseCorners) return null;
+  const cv = self.cv;
+  const targetWidth = Math.min(768, src.cols);
+  const scale = targetWidth / src.cols;
+  const targetHeight = Math.max(1, Math.round(src.rows * scale));
+  const small = new cv.Mat();
+  const gray = new cv.Mat();
+  const smooth = new cv.Mat();
+
+  try {
+    cv.resize(src, small, new cv.Size(targetWidth, targetHeight), 0, 0, cv.INTER_AREA);
+    cv.cvtColor(small, gray, cv.COLOR_RGBA2GRAY);
+    cv.GaussianBlur(gray, smooth, new cv.Size(0, 0), 2, 2, cv.BORDER_REPLICATE);
+
+    const scaled = {};
+    for (const [key, point] of Object.entries(coarseCorners)) {
+      scaled[key] = {x: point.x * scale, y: point.y * scale};
+    }
+
+    const leftOuter = lineXofY(scaled.topLeftCorner, scaled.bottomLeftCorner);
+    const rightOuter = lineXofY(scaled.topRightCorner, scaled.bottomRightCorner);
+    const xLeft = Math.min(scaled.topLeftCorner.x, scaled.bottomLeftCorner.x);
+    const xRight = Math.max(scaled.topRightCorner.x, scaled.bottomRightCorner.x);
+    const widthSpan = xRight - xLeft;
+    if (widthSpan < targetWidth * 0.45) return null;
+
+    const k = Math.max(4, Math.round(targetHeight / 96));
+    const topPoints = [];
+    const bottomPoints = [];
+    const data = smooth.data;
+    const W = smooth.cols;
+    const H = smooth.rows;
+    const topStart = Math.max(k + 1, Math.round(H * 0.02));
+    const topEnd = Math.min(H - k - 1, Math.round(H * 0.38));
+    const bottomStart = Math.max(k + 1, Math.round(H * 0.62));
+    const bottomEnd = Math.min(H - k - 1, Math.round(H * 0.99));
+
+    for (let x = Math.max(0, Math.round(xLeft + 5)); x <= Math.min(W - 1, Math.round(xRight - 5)); x += 3) {
+      let bestTopY = -1, bestTopScore = -Infinity;
+      for (let y = topStart; y < topEnd; y++) {
+        const score = data[(y + k) * W + x] - data[(y - k) * W + x];
+        if (score > bestTopScore) {
+          bestTopScore = score;
+          bestTopY = y;
+        }
+      }
+      if (bestTopScore > 18) topPoints.push({x, y: bestTopY, score: bestTopScore});
+
+      let bestBottomY = -1, bestBottomScore = -Infinity;
+      for (let y = bottomStart; y < bottomEnd; y++) {
+        const score = data[(y - k) * W + x] - data[(y + k) * W + x];
+        if (score > bestBottomScore) {
+          bestBottomScore = score;
+          bestBottomY = y;
+        }
+      }
+      if (bestBottomScore > 18) bottomPoints.push({x, y: bestBottomY, score: bestBottomScore});
+    }
+
+    function fitPiece(points) {
+      if (points.length < 80) return null;
+      let best = null;
+      for (let step = 0; step <= 24; step++) {
+        const fraction = 0.42 + (0.16 * step / 24);
+        const xCenter = xLeft + widthSpan * fraction;
+        const gap = Math.max(8, widthSpan * 0.015);
+        const left = points.filter(p => p.x < xCenter - gap);
+        const right = points.filter(p => p.x > xCenter + gap);
+        if (left.length < 30 || right.length < 30) continue;
+        const fitLeft = weightedLineFit(left);
+        const fitRight = weightedLineFit(right);
+        if (!fitLeft || !fitRight) continue;
+
+        const continuity = Math.abs(
+          (fitLeft.a * xCenter + fitLeft.b) -
+          (fitRight.a * xCenter + fitRight.b)
+        );
+        const score = fitLeft.rms + fitRight.rms + continuity * 0.30;
+        if (!best || score < best.score) {
+          best = {score, xCenter, left: fitLeft, right: fitRight};
+        }
+      }
+      return best;
+    }
+
+    const topFit = fitPiece(topPoints);
+    const bottomFit = fitPiece(bottomPoints);
+    if (!topFit || !bottomFit) return null;
+
+    const foldX = (topFit.xCenter + bottomFit.xCenter) / 2;
+    const topCenterY =
+      ((topFit.left.a * foldX + topFit.left.b) +
+       (topFit.right.a * foldX + topFit.right.b)) / 2;
+    const bottomCenterY =
+      ((bottomFit.left.a * foldX + bottomFit.left.b) +
+       (bottomFit.right.a * foldX + bottomFit.right.b)) / 2;
+
+    const tl = intersectHorizontalVertical(topFit.left, leftOuter);
+    const bl = intersectHorizontalVertical(bottomFit.left, leftOuter);
+    const tr = intersectHorizontalVertical(topFit.right, rightOuter);
+    const br = intersectHorizontalVertical(bottomFit.right, rightOuter);
+    if (!tl || !tr || !bl || !br) return null;
+
+    const sixSmall = {
+      topLeft: tl,
+      topCenter: {x: foldX, y: topCenterY},
+      topRight: tr,
+      bottomLeft: bl,
+      bottomCenter: {x: foldX, y: bottomCenterY},
+      bottomRight: br
+    };
+
+    const all = Object.values(sixSmall);
+    if (all.some(p =>
+      !Number.isFinite(p.x) || !Number.isFinite(p.y) ||
+      p.x < -W * 0.08 || p.x > W * 1.08 ||
+      p.y < -H * 0.08 || p.y > H * 1.08
+    )) return null;
+
+    const topWidth = dist(tl, tr);
+    const bottomWidth = dist(bl, br);
+    const leftHeight = dist(tl, bl);
+    const rightHeight = dist(tr, br);
+    const ratio = Math.max(topWidth, bottomWidth) / Math.max(1, Math.max(leftHeight, rightHeight));
+    const foldFraction = (foldX - xLeft) / Math.max(1, widthSpan);
+    const fitScore = topFit.score + bottomFit.score;
+
+    if (
+      ratio < 1.15 || ratio > 1.85 ||
+      foldFraction < 0.38 || foldFraction > 0.62 ||
+      fitScore > 55
+    ) return null;
+
+    const inverse = 1 / scale;
+    const result = {};
+    for (const [key, p] of Object.entries(sixSmall)) {
+      result[key] = {x: p.x * inverse, y: p.y * inverse};
+    }
+    result.score = fitScore;
+    return result;
+  } finally {
+    small.delete();
+    gray.delete();
+    smooth.delete();
+  }
+}
+
+function piecewisePerspective(src, geometry) {
+  const cv = self.cv;
+  const aspect = Math.SQRT2;
+  const outW = MAX_OUTPUT_EDGE;
+  const outH = Math.round(outW / aspect);
+  const half = Math.floor(outW / 2);
+
+  const leftSrc = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    geometry.topLeft.x, geometry.topLeft.y,
+    geometry.topCenter.x, geometry.topCenter.y,
+    geometry.bottomLeft.x, geometry.bottomLeft.y,
+    geometry.bottomCenter.x, geometry.bottomCenter.y
+  ]);
+  const leftDst = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    0, 0,
+    half - 1, 0,
+    0, outH - 1,
+    half - 1, outH - 1
+  ]);
+  const rightSrc = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    geometry.topCenter.x, geometry.topCenter.y,
+    geometry.topRight.x, geometry.topRight.y,
+    geometry.bottomCenter.x, geometry.bottomCenter.y,
+    geometry.bottomRight.x, geometry.bottomRight.y
+  ]);
+  const rightDst = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    0, 0,
+    outW - half - 1, 0,
+    0, outH - 1,
+    outW - half - 1, outH - 1
+  ]);
+  const leftMatrix = cv.getPerspectiveTransform(leftSrc, leftDst);
+  const rightMatrix = cv.getPerspectiveTransform(rightSrc, rightDst);
+  const left = new cv.Mat();
+  const right = new cv.Mat();
+  const output = new cv.Mat();
+
+  try {
+    cv.warpPerspective(
+      src, left, leftMatrix, new cv.Size(half, outH),
+      cv.INTER_CUBIC, cv.BORDER_CONSTANT, new cv.Scalar(255,255,255,255)
+    );
+    cv.warpPerspective(
+      src, right, rightMatrix, new cv.Size(outW - half, outH),
+      cv.INTER_CUBIC, cv.BORDER_CONSTANT, new cv.Scalar(255,255,255,255)
+    );
+
+    output.create(outH, outW, src.type());
+    const leftRoi = output.roi(new cv.Rect(0, 0, half, outH));
+    const rightRoi = output.roi(new cv.Rect(half, 0, outW - half, outH));
+    try {
+      left.copyTo(leftRoi);
+      right.copyTo(rightRoi);
+    } finally {
+      leftRoi.delete();
+      rightRoi.delete();
+    }
+    return output.clone();
+  } finally {
+    leftSrc.delete(); leftDst.delete(); rightSrc.delete(); rightDst.delete();
+    leftMatrix.delete(); rightMatrix.delete();
+    left.delete(); right.delete(); output.delete();
   }
 }
 
@@ -532,14 +809,26 @@ async function processImage(payload, reportProgress = () => {}) {
   try {
     reportProgress("detecting");
     const detection = payload.corners
-      ? {corners: payload.corners, confidence: 1, whiteRatio: 1, areaRatio: 1}
+      ? {corners: payload.corners, candidateCorners: payload.corners, confidence: 1, whiteRatio: 1, areaRatio: 1}
       : detectCorners(src);
-    const corners = detection.corners || defaultCorners(src.cols, src.rows);
-    const automatic = !payload.corners && Boolean(detection.corners);
+    const foldGeometry = payload.corners
+      ? null
+      : detectFoldGeometry(src, detection.candidateCorners || detection.corners);
+    const corners = detection.corners || (
+      foldGeometry ? {
+        topLeftCorner: foldGeometry.topLeft,
+        topRightCorner: foldGeometry.topRight,
+        bottomLeftCorner: foldGeometry.bottomLeft,
+        bottomRightCorner: foldGeometry.bottomRight
+      } : defaultCorners(src.cols, src.rows)
+    );
+    const automatic = !payload.corners && Boolean(detection.corners || foldGeometry);
     const score = blurScore(src);
 
     reportProgress("perspective");
-    warped = perspective(src, corners);
+    warped = foldGeometry
+      ? piecewisePerspective(src, foldGeometry)
+      : perspective(src, corners);
     const landscapeRotation = payload.preferLandscape && warped.rows > warped.cols ? 90 : 0;
     rotated = rotate(warped, landscapeRotation + (payload.rotation || 0));
 
@@ -557,6 +846,7 @@ async function processImage(payload, reportProgress = () => {}) {
       paperWhiteRatio: detection.whiteRatio,
       paperAreaRatio: detection.areaRatio,
       autoLandscapeRotated: payload.preferLandscape && warped.rows > warped.cols,
+      foldCorrected: Boolean(foldGeometry),
       blurScore: score,
       width: rgba.cols,
       height: rgba.rows,
