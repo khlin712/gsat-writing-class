@@ -866,6 +866,96 @@ function chooseAutomaticWarp(src, detection, foldGeometry) {
   return best;
 }
 
+
+function trimDarkBorders(mat) {
+  const cv = self.cv;
+  const gray = new cv.Mat();
+
+  try {
+    cv.cvtColor(mat, gray, cv.COLOR_RGBA2GRAY);
+    const W = gray.cols, H = gray.rows;
+    const data = gray.data;
+    const maxTrimX = Math.round(W * 0.12);
+    const maxTrimY = Math.round(H * 0.12);
+    const xStart = Math.round(W * 0.10);
+    const xEnd = Math.round(W * 0.90);
+    const yStart = Math.round(H * 0.10);
+    const yEnd = Math.round(H * 0.90);
+
+    function rowPaperFraction(y) {
+      let bright = 0, count = 0;
+      const offset = y * W;
+      for (let x = xStart; x < xEnd; x += 3) {
+        count++;
+        if (data[offset + x] >= 118) bright++;
+      }
+      return count ? bright / count : 0;
+    }
+
+    function colPaperFraction(x) {
+      let bright = 0, count = 0;
+      for (let y = yStart; y < yEnd; y += 3) {
+        count++;
+        if (data[y * W + x] >= 118) bright++;
+      }
+      return count ? bright / count : 0;
+    }
+
+    function findForward(limit, fn) {
+      let streak = 0;
+      for (let i = 0; i <= limit; i++) {
+        if (fn(i) >= 0.68) {
+          streak++;
+          if (streak >= 5) return Math.max(0, i - 4);
+        } else {
+          streak = 0;
+        }
+      }
+      return 0;
+    }
+
+    function findBackward(size, limit, fn) {
+      let streak = 0;
+      for (let step = 0; step <= limit; step++) {
+        const i = size - 1 - step;
+        if (fn(i) >= 0.68) {
+          streak++;
+          if (streak >= 5) return Math.min(size - 1, i + 4);
+        } else {
+          streak = 0;
+        }
+      }
+      return size - 1;
+    }
+
+    const left = findForward(maxTrimX, colPaperFraction);
+    const right = findBackward(W, maxTrimX, colPaperFraction);
+    const top = findForward(maxTrimY, rowPaperFraction);
+    const bottom = findBackward(H, maxTrimY, rowPaperFraction);
+
+    const cropW = right - left + 1;
+    const cropH = bottom - top + 1;
+    if (cropW < W * 0.84 || cropH < H * 0.84) return null;
+
+    const oldRatio = W / Math.max(1, H);
+    const newRatio = cropW / Math.max(1, cropH);
+    if (Math.abs(newRatio / oldRatio - 1) > 0.12) return null;
+
+    if (left < 3 && top < 3 && right > W - 4 && bottom > H - 4) return null;
+
+    const roi = mat.roi(new cv.Rect(left, top, cropW, cropH));
+    try {
+      return roi.clone();
+    } finally {
+      roi.delete();
+    }
+  } catch (_) {
+    return null;
+  } finally {
+    gray.delete();
+  }
+}
+
 function rotate(mat, degrees) {
   const cv = self.cv;
   const turns = ((degrees % 360) + 360) % 360;
@@ -1043,6 +1133,12 @@ async function processImage(payload, reportProgress = () => {}) {
       corners = choice.corners;
       warpKind = choice.kind;
       automatic = choice.kind !== "fallback";
+
+      const trimmed = trimDarkBorders(warped);
+      if (trimmed) {
+        warped.delete();
+        warped = trimmed;
+      }
     }
     const landscapeRotation = payload.preferLandscape && warped.rows > warped.cols ? 90 : 0;
     rotated = rotate(warped, landscapeRotation + (payload.rotation || 0));
