@@ -615,6 +615,267 @@ function piecewisePerspective(src, geometry) {
   }
 }
 
+
+function detectGridBoundaryGeometry(src) {
+  const cv = self.cv;
+  const targetWidth = Math.min(1000, src.cols);
+  const scale = targetWidth / src.cols;
+  const targetHeight = Math.max(1, Math.round(src.rows * scale));
+  const small = new cv.Mat();
+  const gray = new cv.Mat();
+  const background = new cv.Mat();
+  const normalized = new cv.Mat();
+  const edges = new cv.Mat();
+  const lines = new cv.Mat();
+
+  function hValue(line, x) { return line.a * x + line.b; }
+  function vValue(line, y) { return line.c * y + line.d; }
+  function intersect(h, v) {
+    const denom = 1 - h.a * v.c;
+    if (Math.abs(denom) < 1e-6) return null;
+    const y = (h.a * v.d + h.b) / denom;
+    return {x: v.c * y + v.d, y};
+  }
+
+  try {
+    cv.resize(src, small, new cv.Size(targetWidth, targetHeight), 0, 0, cv.INTER_AREA);
+    cv.cvtColor(small, gray, cv.COLOR_RGBA2GRAY);
+
+    let blurSize = Math.max(21, Math.round(Math.min(targetWidth, targetHeight) / 22));
+    if (blurSize % 2 === 0) blurSize += 1;
+    cv.GaussianBlur(gray, background, new cv.Size(blurSize, blurSize), 0, 0, cv.BORDER_REPLICATE);
+    cv.divide(gray, background, normalized, 230);
+
+    cv.Canny(normalized, edges, 30, 90, 3, true);
+    cv.HoughLinesP(
+      edges, lines, 1, Math.PI / 180, 52,
+      Math.max(48, targetWidth * 0.065),
+      Math.max(10, targetWidth * 0.012)
+    );
+
+    const horizontal = [];
+    const vertical = [];
+    const data = lines.data32S || [];
+
+    for (let i = 0; i + 3 < data.length; i += 4) {
+      const x1 = data[i], y1 = data[i + 1], x2 = data[i + 2], y2 = data[i + 3];
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const length = Math.hypot(dx, dy);
+      if (length < 35) continue;
+
+      let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+      while (angle > 90) angle -= 180;
+      while (angle < -90) angle += 180;
+
+      if (Math.abs(angle) < 12 && Math.abs(dx) > 2) {
+        const a = dy / dx;
+        horizontal.push({length, a, b: y1 - a * x1, x1, x2, midX: (x1 + x2) / 2});
+      } else if (Math.abs(Math.abs(angle) - 90) < 12 && Math.abs(dy) > 2) {
+        const c = dx / dy;
+        vertical.push({length, c, d: x1 - c * y1, y1, y2});
+      }
+    }
+
+    if (horizontal.length < 12 || vertical.length < 6) return null;
+
+    const W = targetWidth;
+    const H = targetHeight;
+
+    function selectHorizontal(side, position) {
+      const xRef = W * (side === "left" ? 0.30 : 0.70);
+      const xMin = W * (side === "left" ? 0.06 : 0.42);
+      const xMax = W * (side === "left" ? 0.58 : 0.96);
+      const targetY = H * (position === "top" ? 0.245 : 0.815);
+      const yMin = H * (position === "top" ? 0.16 : 0.70);
+      const yMax = H * (position === "top" ? 0.36 : 0.91);
+      let best = null;
+
+      for (const line of horizontal) {
+        if (line.length < W * 0.08) continue;
+        if (line.midX < xMin || line.midX > xMax) continue;
+
+        const y = hValue(line, xRef);
+        if (y < yMin || y > yMax) continue;
+
+        const minX = Math.min(line.x1, line.x2);
+        const maxX = Math.max(line.x1, line.x2);
+        const spansRef = minX - 18 <= xRef && maxX + 18 >= xRef;
+        const score =
+          line.length * 0.35 * (spansRef ? 1 : 0.70) -
+          Math.abs(y - targetY) * 5 -
+          Math.abs(line.a) * W * 0.5;
+
+        if (!best || score > best.score) best = {...line, score};
+      }
+      return best;
+    }
+
+    const topLeft = selectHorizontal("left", "top");
+    const topRight = selectHorizontal("right", "top");
+    const bottomLeft = selectHorizontal("left", "bottom");
+    const bottomRight = selectHorizontal("right", "bottom");
+    if (!topLeft || !topRight || !bottomLeft || !bottomRight) return null;
+
+    function selectVertical(side, top, bottom) {
+      const xRef = W * (side === "left" ? 0.30 : 0.70);
+      const topY = hValue(top, xRef);
+      const bottomY = hValue(bottom, xRef);
+      if (!(bottomY > topY + H * 0.30)) return null;
+
+      const targetX = W * (side === "left" ? 0.11 : 0.84);
+      const minX = W * (side === "left" ? 0.02 : 0.72);
+      const maxX = W * (side === "left" ? 0.25 : 0.96);
+      const middleY = (topY + bottomY) / 2;
+      let best = null;
+
+      for (const line of vertical) {
+        if (line.length < H * 0.15) continue;
+        const x = vValue(line, middleY);
+        if (x < minX || x > maxX) continue;
+
+        const yMin = Math.min(line.y1, line.y2);
+        const yMax = Math.max(line.y1, line.y2);
+        const overlap = Math.max(0, Math.min(yMax, bottomY) - Math.max(yMin, topY));
+        const coverage = overlap / Math.max(1, bottomY - topY);
+        if (coverage < 0.25) continue;
+
+        const normalizedDistance = Math.abs(x - targetX) / Math.max(1, W * 0.08);
+        const normalizedLength = Math.min(1, line.length / Math.max(1, H * 0.50));
+        const score =
+          coverage * 2.0 +
+          normalizedLength * 0.70 -
+          normalizedDistance * 1.50 -
+          Math.abs(line.c) * 3.0;
+
+        if (!best || score > best.score) best = {...line, x, coverage, score};
+      }
+      return best;
+    }
+
+    const leftLine = selectVertical("left", topLeft, bottomLeft);
+    const rightLine = selectVertical("right", topRight, bottomRight);
+    if (!leftLine || !rightLine) return null;
+
+    const tl = intersect(topLeft, leftLine);
+    const bl = intersect(bottomLeft, leftLine);
+    const tr = intersect(topRight, rightLine);
+    const br = intersect(bottomRight, rightLine);
+    if (!tl || !bl || !tr || !br) return null;
+
+    const foldX = W * 0.50;
+    const tc = {x: foldX, y: (hValue(topLeft, foldX) + hValue(topRight, foldX)) / 2};
+    const bc = {x: foldX, y: (hValue(bottomLeft, foldX) + hValue(bottomRight, foldX)) / 2};
+
+    const points = [tl, tc, tr, bl, bc, br];
+    if (points.some(p =>
+      !Number.isFinite(p.x) || !Number.isFinite(p.y) ||
+      p.x < -W * 0.06 || p.x > W * 1.06 ||
+      p.y < -H * 0.06 || p.y > H * 1.06
+    )) return null;
+
+    const leftHeight = dist(tl, bl);
+    const rightHeight = dist(tr, br);
+    const topWidth = dist(tl, tr);
+    const bottomWidth = dist(bl, br);
+    const ratio = Math.max(topWidth, bottomWidth) / Math.max(1, (leftHeight + rightHeight) / 2);
+    if (ratio < 1.35 || ratio > 2.15) return null;
+
+    const heightMismatch = Math.abs(leftHeight - rightHeight) / Math.max(1, Math.max(leftHeight, rightHeight));
+    if (heightMismatch > 0.28) return null;
+
+    const inverse = 1 / scale;
+    return {
+      topLeft: {x: tl.x * inverse, y: tl.y * inverse},
+      topCenter: {x: tc.x * inverse, y: tc.y * inverse},
+      topRight: {x: tr.x * inverse, y: tr.y * inverse},
+      bottomLeft: {x: bl.x * inverse, y: bl.y * inverse},
+      bottomCenter: {x: bc.x * inverse, y: bc.y * inverse},
+      bottomRight: {x: br.x * inverse, y: br.y * inverse},
+      score: heightMismatch * 10
+    };
+  } catch (_) {
+    return null;
+  } finally {
+    small.delete();
+    gray.delete();
+    background.delete();
+    normalized.delete();
+    edges.delete();
+    lines.delete();
+  }
+}
+
+function gridPiecewisePerspective(src, geometry) {
+  const cv = self.cv;
+  const outW = MAX_OUTPUT_EDGE;
+  const outH = Math.round(outW / Math.SQRT2);
+  const half = Math.floor(outW / 2);
+
+  const gridLeft = Math.round(outW * 0.065);
+  const gridRightLocal = Math.round(outW * 0.935) - half;
+  const gridTop = Math.round(outH * 0.205);
+  const gridBottom = Math.round(outH * 0.905);
+
+  const leftSrc = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    geometry.topLeft.x, geometry.topLeft.y,
+    geometry.topCenter.x, geometry.topCenter.y,
+    geometry.bottomLeft.x, geometry.bottomLeft.y,
+    geometry.bottomCenter.x, geometry.bottomCenter.y
+  ]);
+  const leftDst = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    gridLeft, gridTop,
+    half - 1, gridTop,
+    gridLeft, gridBottom,
+    half - 1, gridBottom
+  ]);
+  const rightSrc = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    geometry.topCenter.x, geometry.topCenter.y,
+    geometry.topRight.x, geometry.topRight.y,
+    geometry.bottomCenter.x, geometry.bottomCenter.y,
+    geometry.bottomRight.x, geometry.bottomRight.y
+  ]);
+  const rightDst = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    0, gridTop,
+    gridRightLocal, gridTop,
+    0, gridBottom,
+    gridRightLocal, gridBottom
+  ]);
+
+  const leftMatrix = cv.getPerspectiveTransform(leftSrc, leftDst);
+  const rightMatrix = cv.getPerspectiveTransform(rightSrc, rightDst);
+  const left = new cv.Mat();
+  const right = new cv.Mat();
+  const output = new cv.Mat();
+
+  try {
+    cv.warpPerspective(
+      src, left, leftMatrix, new cv.Size(half, outH),
+      cv.INTER_CUBIC, cv.BORDER_CONSTANT, new cv.Scalar(255,255,255,255)
+    );
+    cv.warpPerspective(
+      src, right, rightMatrix, new cv.Size(outW - half, outH),
+      cv.INTER_CUBIC, cv.BORDER_CONSTANT, new cv.Scalar(255,255,255,255)
+    );
+
+    output.create(outH, outW, src.type());
+    const leftRoi = output.roi(new cv.Rect(0, 0, half, outH));
+    const rightRoi = output.roi(new cv.Rect(half, 0, outW - half, outH));
+    try {
+      left.copyTo(leftRoi);
+      right.copyTo(rightRoi);
+    } finally {
+      leftRoi.delete();
+      rightRoi.delete();
+    }
+    return output.clone();
+  } finally {
+    leftSrc.delete(); leftDst.delete(); rightSrc.delete(); rightDst.delete();
+    leftMatrix.delete(); rightMatrix.delete();
+    left.delete(); right.delete(); output.delete();
+  }
+}
+
 function perspective(src, corners) {
   const cv = self.cv;
   const width = Math.max(
@@ -848,7 +1109,7 @@ function fineDeskew(mat, angle) {
   }
 }
 
-function chooseAutomaticWarp(src, detection, foldGeometry) {
+function chooseAutomaticWarp(src, detection, foldGeometry, gridGeometry) {
   const candidates = [];
 
   const fallbackCorners = defaultCorners(src.cols, src.rows);
@@ -890,6 +1151,22 @@ function chooseAutomaticWarp(src, detection, foldGeometry) {
     });
   }
 
+
+  if (gridGeometry) {
+    const gridWarp = gridPiecewisePerspective(src, gridGeometry);
+    candidates.push({
+      kind: "grid",
+      mat: gridWarp,
+      score: warpQualityScore(gridWarp),
+      corners: {
+        topLeftCorner: gridGeometry.topLeft,
+        topRightCorner: gridGeometry.topRight,
+        bottomLeftCorner: gridGeometry.bottomLeft,
+        bottomRightCorner: gridGeometry.bottomRight
+      }
+    });
+  }
+
   const fallbackCandidate = candidates.find(item => item.kind === "fallback");
   let best = fallbackCandidate;
 
@@ -905,6 +1182,15 @@ function chooseAutomaticWarp(src, detection, foldGeometry) {
     if (candidate.kind === "fold") {
       const needed = foldGeometry?.score > 25 ? 0.60 : 0.25;
       if (candidate.score < 5.2 && improvement >= needed && candidate.score < best.score) best = candidate;
+      continue;
+    }
+
+    if (candidate.kind === "grid") {
+      if (
+        candidate.score < 5.0 &&
+        candidate.score <= fallbackCandidate.score + 0.20 &&
+        candidate.score < best.score + 0.20
+      ) best = candidate;
       continue;
     }
 
@@ -1176,6 +1462,9 @@ async function processImage(payload, reportProgress = () => {}) {
     const foldGeometry = payload.corners
       ? null
       : detectFoldGeometry(src, detection.candidateCorners || detection.corners);
+    const gridGeometry = payload.corners
+      ? null
+      : detectGridBoundaryGeometry(src);
     let corners = payload.corners || detection.corners || defaultCorners(src.cols, src.rows);
     let automatic = false;
     let warpKind = payload.corners ? "manual" : "fallback";
@@ -1186,7 +1475,7 @@ async function processImage(payload, reportProgress = () => {}) {
       warped = perspective(src, payload.corners);
       automatic = false;
     } else {
-      const choice = chooseAutomaticWarp(src, detection, foldGeometry);
+      const choice = chooseAutomaticWarp(src, detection, foldGeometry, gridGeometry);
       warped = choice.mat;
       corners = choice.corners;
       warpKind = choice.kind;
@@ -1215,7 +1504,7 @@ async function processImage(payload, reportProgress = () => {}) {
       paperWhiteRatio: detection.whiteRatio,
       paperAreaRatio: detection.areaRatio,
       autoLandscapeRotated: payload.preferLandscape && warped.rows > warped.cols,
-      foldCorrected: warpKind === "fold",
+      foldCorrected: warpKind === "fold" || warpKind === "grid",
       warpKind,
       blurScore: score,
       width: rgba.cols,
