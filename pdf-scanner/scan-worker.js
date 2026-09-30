@@ -652,6 +652,132 @@ function perspective(src, corners) {
   }
 }
 
+
+function median(values) {
+  if (!values.length) return Infinity;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function gridStraightnessScore(mat) {
+  const cv = self.cv;
+  const scale = Math.min(1, 700 / Math.max(mat.cols, mat.rows));
+  const small = new cv.Mat();
+  const gray = new cv.Mat();
+  const binary = new cv.Mat();
+  const horizontal = new cv.Mat();
+  const vertical = new cv.Mat();
+  const hLines = new cv.Mat();
+  const vLines = new cv.Mat();
+
+  try {
+    cv.resize(
+      mat,
+      small,
+      new cv.Size(Math.max(1, Math.round(mat.cols * scale)), Math.max(1, Math.round(mat.rows * scale))),
+      0, 0, cv.INTER_AREA
+    );
+    cv.cvtColor(small, gray, cv.COLOR_RGBA2GRAY);
+    cv.adaptiveThreshold(gray, binary, 255, cv.ADAPTIVE_THRESH_GAUSSIAN_C, cv.THRESH_BINARY_INV, 31, 13);
+
+    const hKernel = cv.Mat.ones(1, Math.max(18, Math.round(small.cols / 20)), cv.CV_8U);
+    const vKernel = cv.Mat.ones(Math.max(18, Math.round(small.rows / 20)), 1, cv.CV_8U);
+    cv.morphologyEx(binary, horizontal, cv.MORPH_OPEN, hKernel);
+    cv.morphologyEx(binary, vertical, cv.MORPH_OPEN, vKernel);
+    hKernel.delete();
+    vKernel.delete();
+
+    cv.HoughLinesP(horizontal, hLines, 1, Math.PI / 180, 28, Math.max(45, small.cols * 0.08), 12);
+    cv.HoughLinesP(vertical, vLines, 1, Math.PI / 180, 28, Math.max(40, small.rows * 0.08), 12);
+
+    const hDeviations = [];
+    const vDeviations = [];
+    const hData = hLines.data32S || [];
+    const vData = vLines.data32S || [];
+
+    for (let i = 0; i + 3 < hData.length; i += 4) {
+      const x1 = hData[i], y1 = hData[i + 1], x2 = hData[i + 2], y2 = hData[i + 3];
+      const angle = Math.abs(Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI);
+      const dev = Math.min(angle, Math.abs(180 - angle));
+      if (dev <= 15) hDeviations.push(dev);
+    }
+    for (let i = 0; i + 3 < vData.length; i += 4) {
+      const x1 = vData[i], y1 = vData[i + 1], x2 = vData[i + 2], y2 = vData[i + 3];
+      const angle = Math.abs(Math.atan2(y2 - y1, x2 - x1) * 180 / Math.PI);
+      const dev = Math.abs(90 - angle);
+      if (dev <= 15) vDeviations.push(dev);
+    }
+
+    if (hDeviations.length < 3 || vDeviations.length < 3) return 99;
+    return median(hDeviations) + median(vDeviations);
+  } catch (_) {
+    return 99;
+  } finally {
+    small.delete(); gray.delete(); binary.delete();
+    horizontal.delete(); vertical.delete(); hLines.delete(); vLines.delete();
+  }
+}
+
+function chooseAutomaticWarp(src, detection, foldGeometry) {
+  const candidates = [];
+
+  const fallbackCorners = defaultCorners(src.cols, src.rows);
+  const fallback = perspective(src, fallbackCorners);
+  candidates.push({kind: "fallback", mat: fallback, score: gridStraightnessScore(fallback), corners: fallbackCorners});
+
+  if (detection.corners) {
+    const standard = perspective(src, detection.corners);
+    candidates.push({kind: "standard", mat: standard, score: gridStraightnessScore(standard), corners: detection.corners});
+  } else if (detection.candidateCorners) {
+    const coarse = perspective(src, detection.candidateCorners);
+    candidates.push({kind: "coarse", mat: coarse, score: gridStraightnessScore(coarse), corners: detection.candidateCorners});
+  }
+
+  if (foldGeometry) {
+    const folded = piecewisePerspective(src, foldGeometry);
+    candidates.push({
+      kind: "fold",
+      mat: folded,
+      score: gridStraightnessScore(folded),
+      corners: {
+        topLeftCorner: foldGeometry.topLeft,
+        topRightCorner: foldGeometry.topRight,
+        bottomLeftCorner: foldGeometry.bottomLeft,
+        bottomRightCorner: foldGeometry.bottomRight
+      }
+    });
+  }
+
+  const fallbackCandidate = candidates.find(item => item.kind === "fallback");
+  let best = fallbackCandidate;
+
+  for (const candidate of candidates) {
+    if (candidate.kind === "fallback") continue;
+    const improvement = fallbackCandidate.score - candidate.score;
+
+    if (candidate.kind === "fold") {
+      const needed = foldGeometry?.score > 25 ? 0.60 : 0.25;
+      if (candidate.score < 4.5 && improvement >= needed && candidate.score < best.score) best = candidate;
+      continue;
+    }
+
+    if (candidate.kind === "standard") {
+      if (candidate.score <= fallbackCandidate.score + 0.15 && candidate.score < best.score + 0.15) best = candidate;
+      continue;
+    }
+
+    if (candidate.kind === "coarse") {
+      if (improvement >= 0.45 && candidate.score < best.score) best = candidate;
+    }
+  }
+
+  for (const candidate of candidates) {
+    if (candidate !== best) candidate.mat.delete();
+  }
+  return best;
+}
+
 function rotate(mat, degrees) {
   const cv = self.cv;
   const turns = ((degrees % 360) + 360) % 360;
@@ -814,21 +940,22 @@ async function processImage(payload, reportProgress = () => {}) {
     const foldGeometry = payload.corners
       ? null
       : detectFoldGeometry(src, detection.candidateCorners || detection.corners);
-    const corners = detection.corners || (
-      foldGeometry ? {
-        topLeftCorner: foldGeometry.topLeft,
-        topRightCorner: foldGeometry.topRight,
-        bottomLeftCorner: foldGeometry.bottomLeft,
-        bottomRightCorner: foldGeometry.bottomRight
-      } : defaultCorners(src.cols, src.rows)
-    );
-    const automatic = !payload.corners && Boolean(detection.corners || foldGeometry);
+    let corners = payload.corners || detection.corners || defaultCorners(src.cols, src.rows);
+    let automatic = false;
+    let warpKind = payload.corners ? "manual" : "fallback";
     const score = blurScore(src);
 
     reportProgress("perspective");
-    warped = foldGeometry
-      ? piecewisePerspective(src, foldGeometry)
-      : perspective(src, corners);
+    if (payload.corners) {
+      warped = perspective(src, payload.corners);
+      automatic = false;
+    } else {
+      const choice = chooseAutomaticWarp(src, detection, foldGeometry);
+      warped = choice.mat;
+      corners = choice.corners;
+      warpKind = choice.kind;
+      automatic = choice.kind !== "fallback";
+    }
     const landscapeRotation = payload.preferLandscape && warped.rows > warped.cols ? 90 : 0;
     rotated = rotate(warped, landscapeRotation + (payload.rotation || 0));
 
@@ -846,7 +973,8 @@ async function processImage(payload, reportProgress = () => {}) {
       paperWhiteRatio: detection.whiteRatio,
       paperAreaRatio: detection.areaRatio,
       autoLandscapeRotated: payload.preferLandscape && warped.rows > warped.cols,
-      foldCorrected: Boolean(foldGeometry),
+      foldCorrected: warpKind === "fold",
+      warpKind,
       blurScore: score,
       width: rgba.cols,
       height: rgba.rows,
