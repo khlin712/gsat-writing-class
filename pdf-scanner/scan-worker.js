@@ -645,7 +645,7 @@ function perspective(src, corners) {
   const dst = new cv.Mat();
 
   try {
-    cv.warpPerspective(src, dst, matrix, new cv.Size(outW, outH), cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar(255,255,255,255));
+    cv.warpPerspective(src, dst, matrix, new cv.Size(outW, outH), cv.INTER_CUBIC, cv.BORDER_CONSTANT, new cv.Scalar(255,255,255,255));
     return dst.clone();
   } finally {
     srcTri.delete(); dstTri.delete(); matrix.delete(); dst.delete();
