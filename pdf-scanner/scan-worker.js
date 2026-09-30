@@ -720,6 +720,64 @@ function gridStraightnessScore(mat) {
 }
 
 
+
+function borderBackgroundPenalty(mat) {
+  const cv = self.cv;
+  const scale = Math.min(1, 700 / Math.max(mat.cols, mat.rows));
+  const small = new cv.Mat();
+  const gray = new cv.Mat();
+
+  try {
+    cv.resize(
+      mat,
+      small,
+      new cv.Size(Math.max(1, Math.round(mat.cols * scale)), Math.max(1, Math.round(mat.rows * scale))),
+      0, 0, cv.INTER_AREA
+    );
+    cv.cvtColor(small, gray, cv.COLOR_RGBA2GRAY);
+    const W = gray.cols, H = gray.rows;
+    const bandX = Math.max(1, Math.round(W * 0.06));
+    const bandY = Math.max(1, Math.round(H * 0.06));
+    const data = gray.data;
+
+    let dark = 0;
+    let veryDark = 0;
+    let count = 0;
+
+    function sample(x, y) {
+      const value = data[y * W + x];
+      count++;
+      if (value < 95) dark++;
+      if (value < 55) veryDark++;
+    }
+
+    for (let y = 0; y < bandY; y += 2) {
+      for (let x = 0; x < W; x += 2) sample(x, y);
+    }
+    for (let y = H - bandY; y < H; y += 2) {
+      for (let x = 0; x < W; x += 2) sample(x, y);
+    }
+    for (let x = 0; x < bandX; x += 2) {
+      for (let y = bandY; y < H - bandY; y += 2) sample(x, y);
+    }
+    for (let x = W - bandX; x < W; x += 2) {
+      for (let y = bandY; y < H - bandY; y += 2) sample(x, y);
+    }
+
+    if (!count) return 0;
+    return (dark / count) * 4 + (veryDark / count) * 3;
+  } catch (_) {
+    return 0;
+  } finally {
+    small.delete();
+    gray.delete();
+  }
+}
+
+function warpQualityScore(mat) {
+  return gridStraightnessScore(mat) + borderBackgroundPenalty(mat) * 0.30;
+}
+
 function dominantSkewAngle(mat) {
   const cv = self.cv;
   const scale = Math.min(1, 800 / Math.max(mat.cols, mat.rows));
@@ -795,7 +853,7 @@ function chooseAutomaticWarp(src, detection, foldGeometry) {
 
   const fallbackCorners = defaultCorners(src.cols, src.rows);
   const fallback = perspective(src, fallbackCorners);
-  const fallbackScore = gridStraightnessScore(fallback);
+  const fallbackScore = warpQualityScore(fallback);
   candidates.push({kind: "fallback", mat: fallback, score: fallbackScore, corners: fallbackCorners});
 
   const skewAngle = dominantSkewAngle(fallback);
@@ -804,17 +862,17 @@ function chooseAutomaticWarp(src, detection, foldGeometry) {
     candidates.push({
       kind: "deskew",
       mat: deskewed,
-      score: gridStraightnessScore(deskewed),
+      score: warpQualityScore(deskewed),
       corners: fallbackCorners
     });
   }
 
   if (detection.corners) {
     const standard = perspective(src, detection.corners);
-    candidates.push({kind: "standard", mat: standard, score: gridStraightnessScore(standard), corners: detection.corners});
+    candidates.push({kind: "standard", mat: standard, score: warpQualityScore(standard), corners: detection.corners});
   } else if (detection.candidateCorners) {
     const coarse = perspective(src, detection.candidateCorners);
-    candidates.push({kind: "coarse", mat: coarse, score: gridStraightnessScore(coarse), corners: detection.candidateCorners});
+    candidates.push({kind: "coarse", mat: coarse, score: warpQualityScore(coarse), corners: detection.candidateCorners});
   }
 
   if (foldGeometry) {
@@ -822,7 +880,7 @@ function chooseAutomaticWarp(src, detection, foldGeometry) {
     candidates.push({
       kind: "fold",
       mat: folded,
-      score: gridStraightnessScore(folded),
+      score: warpQualityScore(folded),
       corners: {
         topLeftCorner: foldGeometry.topLeft,
         topRightCorner: foldGeometry.topRight,
@@ -846,7 +904,7 @@ function chooseAutomaticWarp(src, detection, foldGeometry) {
 
     if (candidate.kind === "fold") {
       const needed = foldGeometry?.score > 25 ? 0.60 : 0.25;
-      if (candidate.score < 4.5 && improvement >= needed && candidate.score < best.score) best = candidate;
+      if (candidate.score < 5.2 && improvement >= needed && candidate.score < best.score) best = candidate;
       continue;
     }
 
