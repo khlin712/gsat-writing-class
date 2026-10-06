@@ -2916,3 +2916,17 @@ body::before {
     min-height: 132px;
   }
 }
+
+
+/* GSAP enhancement layer: CSS animations remain the fallback if the CDN is unavailable. */
+.gsap-enhanced .hero h1,
+.gsap-enhanced .hero h1 span {
+  animation: none;
+}
+
+.gsap-enhanced.js .reveal,
+.gsap-enhanced.js .reveal.is-visible {
+  opacity: 1;
+  transform: none;
+  transition: none;
+}
