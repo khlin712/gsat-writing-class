@@ -157,69 +157,13 @@
     start: "top 80%",
   });
 
-  reveal(".overview-card", ".overview-grid", {
-    y: 22,
-    scale: 0.98,
-    duration: 0.62,
-    stagger: 0.1,
-    start: "top 82%",
-  });
-  reveal(".trial-band-inner", ".trial-band", {
-    y: 20,
-    duration: 0.68,
-    start: "top 84%",
-  });
-  reveal(".result-card", ".results-grid", {
-    y: 22,
-    scale: 0.98,
-    duration: 0.68,
-    stagger: 0.1,
-    start: "top 82%",
-  });
-  reveal(".feedback-card", ".feedback-grid", {
-    y: 18,
-    duration: 0.62,
-    stagger: 0.1,
-    start: "top 84%",
-  });
-  reveal(".detail-card", ".course-detail-list", {
-    y: 18,
-    duration: 0.58,
-    stagger: 0.08,
-    start: "top 84%",
-  });
-  reveal(".faq-panel", ".details-layout", {
-    y: 18,
-    duration: 0.68,
-    start: "top 84%",
-  });
-  reveal(".resource-link", ".resource-list", {
-    y: 14,
-    duration: 0.52,
-    stagger: 0.07,
-    start: "top 88%",
-  });
-  reveal(".annual-cta", ".annual-cta-grid", {
-    y: 22,
-    scale: 0.98,
-    duration: 0.68,
-    stagger: 0.1,
-    start: "top 84%",
-  });
-  reveal(".contact-copy-refresh, .contact-links-panel", ".contact-panel", {
-    y: 20,
-    duration: 0.68,
-    stagger: 0.1,
-    start: "top 84%",
-  });
-
   const arrowItems = document.querySelectorAll(
-    ".hub-link, .hub-classroom, .course-feature, .resource-link, .contact-social-list a"
+    ".hub-link, .hub-classroom, .course-feature"
   );
 
   arrowItems.forEach((item) => {
     const arrow = item.querySelector(
-      ".hub-link-arrow, .hub-classroom-arrow, .course-feature-link span, .resource-link > span:last-child, .contact-social-list a > span:last-child"
+      ".hub-link-arrow, .hub-classroom-arrow, .course-feature-link span"
     );
     if (!arrow) return;
 
