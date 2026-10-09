@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#111827">
   <meta name="description" content="國寫作文專用掃描器：自動拉正、文字增強、壓縮並輸出規範命名 PDF。">
   <title>作文 PDF Scanner</title>
-  <link rel="stylesheet" href="./style.css?v=20260929-11">
+  <link rel="stylesheet" href="./style.css?v=20261009-1">
   <script>
     if ("serviceWorker" in navigator) {
       const scannerScope = new URL("./", location.href).href;
@@ -24,7 +24,7 @@
         .catch(() => {});
     }
   </script>
-  <script defer src="./app.js?v=20260930-2"></script>
+  <script defer src="./app.js?v=20261009-12"></script>
 </head>
 <body>
   <main class="app">
@@ -51,7 +51,7 @@
       <input id="replaceInput" class="visually-hidden" type="file" accept="image/*" capture="environment">
 
       <div class="privacy-note">所有影像處理都在你的裝置上完成，原始作文不會上傳到本站。</div>
-      <div id="engineStatus" class="status">掃描引擎背景準備中，你可以先選擇照片。</div>
+      <div id="engineStatus" class="status" role="status" aria-live="polite">掃描引擎背景準備中，你可以先選擇照片。</div>
       <div id="pages" class="pages" aria-live="polite">
         <div class="empty">尚未加入作文頁面</div>
       </div>
@@ -67,7 +67,7 @@
           <input id="seatNo" inputmode="numeric" autocomplete="off" maxlength="3" placeholder="例如 1">
         </label>
         <label>姓名
-          <input id="studentName" autocomplete="name" maxlength="24" placeholder="例如 張沛芸">
+          <input id="studentName" autocomplete="name" maxlength="24" placeholder="例如 林小弦">
         </label>
         <label>題目
           <input id="essayTitle" autocomplete="off" maxlength="40" placeholder="例如 通關密語">
@@ -95,7 +95,7 @@
     <section class="card" aria-labelledby="export-title">
       <div class="step-title" id="export-title"><span>4</span>輸出 PDF</div>
       <button id="exportBtn" class="primary" disabled>產生並下載 PDF</button>
-      <div id="exportStatus" class="status"></div>
+      <div id="exportStatus" class="status" role="status" aria-live="polite"></div>
       <p class="only-pdf">只輸出 PDF，不提供 JPG／PNG。</p>
     </section>
   </main>
@@ -105,7 +105,7 @@
       <div class="crop-head">
         <div>
           <strong>調整紙張四角</strong>
-          <small>把四個圓點拖到作文紙的四個角</small>
+          <small>手指放在四個區域內拖曳，即可調整對應角點</small>
         </div>
         <button value="cancel" class="icon-button" aria-label="關閉">✕</button>
       </div>

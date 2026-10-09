@@ -5,7 +5,7 @@ const SOURCE_MAX_EDGE = 3000;
 const JPEG_QUALITY_ENHANCED = 0.94;
 const JPEG_QUALITY_ORIGINAL = 0.92;
 const JSPDF_URL = "https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js";
-const WORKER_URL = "./scan-worker.js?v=20260930-2";
+const WORKER_URL = "./scan-worker.js?v=20261009-2";
 
 const state = {
   cvReady: false,
@@ -23,7 +23,11 @@ const state = {
   previewScale: 1,
   replacePageId: null,
   enginePromise: null,
-  pdfPromise: null
+  pdfPromise: null,
+  adding: false,
+  editorOpening: false,
+  cropApplying: false,
+  exporting: false
 };
 
 const cameraInput = $("#cameraInput");
@@ -50,6 +54,8 @@ const reviewStatus = $("#reviewStatus");
 const reviewPages = $("#reviewPages");
 const reviewFilename = $("#reviewFilename");
 
+const EXPORT_BUTTON_LABEL = "產生並下載 PDF";
+
 function cloneCorners(corners) {
   return corners ? {
     topLeftCorner: {...corners.topLeftCorner},
@@ -57,6 +63,15 @@ function cloneCorners(corners) {
     bottomLeftCorner: {...corners.bottomLeftCorner},
     bottomRightCorner: {...corners.bottomRightCorner}
   } : null;
+}
+
+function cloneWarpGeometry(geometry) {
+  if (!geometry || typeof geometry !== "object" || typeof geometry.kind !== "string") return null;
+  try {
+    return JSON.parse(JSON.stringify(geometry));
+  } catch (_) {
+    return null;
+  }
 }
 
 function distance(a, b) {
@@ -98,7 +113,7 @@ function updateFilename() {
 
 function updateExportState() {
   const readyPages = state.pages.length > 0 && state.pages.every(page => page.processedDataUrl && !page.busy);
-  exportBtn.disabled = !state.cvReady || state.processing > 0 || !readyPages || !currentFilename();
+  exportBtn.disabled = state.exporting || !state.cvReady || state.processing > 0 || !readyPages || !currentFilename();
 }
 
 function setEngineStatus(message, kind = "") {
@@ -135,6 +150,16 @@ function waitFor(test, timeoutMs = 30000, intervalMs = 100) {
       setTimeout(tick, intervalMs);
     };
     tick();
+  });
+}
+
+function nextPaint() {
+  return new Promise(resolve => {
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => setTimeout(resolve, 0));
+    } else {
+      setTimeout(resolve, 0);
+    }
   });
 }
 
@@ -238,29 +263,45 @@ async function ensureScannerReady() {
 
   state.enginePromise = new Promise(resolve => {
     setEngineStatus("掃描引擎正在背景準備，網頁仍可正常操作…");
-    const worker = startWorker();
+    let worker;
+    let settled = false;
+    let timeout;
 
-    const timeout = setTimeout(() => {
-      if (state.workerReady) return;
-      state.enginePromise = null;
-      setEngineStatus("掃描引擎準備時間較久，請再試一次。", "warn");
-      resolve(false);
-    }, 60000);
+    const finish = ready => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      if (worker) {
+        worker.removeEventListener("message", onMessage);
+        worker.removeEventListener("error", onError);
+      }
+      if (!ready) state.enginePromise = null;
+      resolve(ready);
+    };
 
     const onMessage = event => {
-      if (event.data?.type === "ready") {
-        clearTimeout(timeout);
-        worker.removeEventListener("message", onMessage);
-        resolve(true);
-      }
-      if (event.data?.type === "init-error") {
-        clearTimeout(timeout);
-        worker.removeEventListener("message", onMessage);
-        state.enginePromise = null;
-        resolve(false);
-      }
+      if (event.data?.type === "ready") finish(true);
+      if (event.data?.type === "init-error") finish(false);
     };
-    worker.addEventListener("message", onMessage);
+    const onError = () => {
+      setEngineStatus("掃描引擎發生錯誤，請再試一次。", "bad");
+      finish(false);
+    };
+
+    try {
+      worker = startWorker();
+      worker.addEventListener("message", onMessage);
+      worker.addEventListener("error", onError);
+      timeout = setTimeout(() => {
+        if (state.workerReady) return finish(true);
+        setEngineStatus("掃描引擎準備時間較久，請再試一次。", "warn");
+        finish(false);
+      }, 60000);
+    } catch (error) {
+      console.error(error);
+      setEngineStatus("掃描引擎無法啟動，請重新整理後再試。", "bad");
+      finish(false);
+    }
   });
 
   return state.enginePromise;
@@ -318,7 +359,7 @@ async function ensurePdfReady() {
   return state.pdfPromise;
 }
 
-setEngineStatus("掃描引擎背景準備中，你可以先選擇照片。", "ok");
+setEngineStatus("掃描引擎背景準備中，你可以先選擇照片。");
 setTimeout(() => { ensureScannerReady(); }, 50);
 
 async function loadFileToCanvas(file, maxEdge = SOURCE_MAX_EDGE) {
@@ -393,6 +434,8 @@ const PROCESS_STAGE_LABELS = {
 };
 
 async function processPage(page, {detect = false} = {}) {
+  if (!page || page.busy) return;
+
   page.busy = true;
   page.stage = "讀取照片";
   state.processing++;
@@ -400,6 +443,9 @@ async function processPage(page, {detect = false} = {}) {
   renderPages();
 
   try {
+    // Let the disabled state and the current stage paint before decoding or
+    // copying a large camera image on the main thread.
+    await nextPaint();
     const source = await loadFileToCanvas(page.file);
     page.sourceWidth = source.width;
     page.sourceHeight = source.height;
@@ -409,7 +455,8 @@ async function processPage(page, {detect = false} = {}) {
     const ready = await ensureScannerReady();
     if (!ready) throw new Error("掃描引擎尚未準備完成，請再試一次");
 
-    const currentCorners = (!detect && page.corners && validCorners(page.corners, source.width, source.height))
+    const currentWarpGeometry = !detect ? cloneWarpGeometry(page.warpGeometry) : null;
+    const currentCorners = (!currentWarpGeometry && !detect && page.corners && validCorners(page.corners, source.width, source.height))
       ? cloneCorners(page.corners)
       : null;
 
@@ -417,6 +464,11 @@ async function processPage(page, {detect = false} = {}) {
     const result = await workerRequest("process", {
       ...payload,
       corners: currentCorners,
+      warpGeometry: currentWarpGeometry,
+      suggestedCorners: cloneCorners(page.suggestedCorners),
+      detectionConfidence: page.detectionConfidence,
+      paperWhiteRatio: page.paperWhiteRatio,
+      paperAreaRatio: page.paperAreaRatio,
       mode: page.mode,
       rotation: page.rotation,
       preferLandscape: true
@@ -426,6 +478,9 @@ async function processPage(page, {detect = false} = {}) {
     });
 
     page.corners = result.corners || defaultCorners(source.width, source.height);
+    page.warpGeometry = cloneWarpGeometry(result.warpGeometry);
+    page.suggestedCorners = cloneCorners(result.suggestedCorners);
+    page.warpKind = result.warpKind || (currentCorners ? "manual" : "fallback");
     if (detect || !currentCorners) page.autoDetected = Boolean(result.autoDetected);
     page.detectionConfidence = result.detectionConfidence;
     page.paperWhiteRatio = result.paperWhiteRatio;
@@ -434,8 +489,12 @@ async function processPage(page, {detect = false} = {}) {
     page.blurScore = result.blurScore;
     page.stage = "建立預覽";
     renderPages();
+    await nextPaint();
 
     const finalCanvas = workerImageToCanvas(result);
+    page.stage = "建立 JPEG";
+    renderPages();
+    await nextPaint();
     const quality = page.mode === "enhanced" ? JPEG_QUALITY_ENHANCED : JPEG_QUALITY_ORIGINAL;
     page.processedDataUrl = finalCanvas.toDataURL("image/jpeg", quality);
     page.outputWidth = finalCanvas.width;
@@ -455,7 +514,22 @@ async function processPage(page, {detect = false} = {}) {
   }
 }
 
+function setScanInputBusy(busy) {
+  [cameraInput, galleryInput].forEach(input => {
+    input.disabled = busy;
+  });
+  document.querySelectorAll(".scan-button").forEach(button => {
+    button.classList.toggle("busy", busy);
+    button.setAttribute("aria-disabled", busy ? "true" : "false");
+  });
+}
+
 async function addFiles(fileList) {
+  if (state.adding) {
+    setEngineStatus("照片正在處理中，請等目前批次完成，不用重複選取。", "warn");
+    return;
+  }
+
   const files = [...fileList].filter(file => !file.type || file.type.startsWith("image/"));
   if (!files.length) {
     setEngineStatus("沒有可讀取的圖片。", "warn");
@@ -470,54 +544,71 @@ async function addFiles(fileList) {
     return;
   }
 
-  const pagesToProcess = accepted.map(file => ({
-    id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
-    file,
-    mode: "enhanced",
-    rotation: 0,
-    corners: null,
-    autoDetected: false,
-    detectionConfidence: null,
-    paperWhiteRatio: null,
-    paperAreaRatio: null,
-    autoLandscapeRotated: false,
-    blurScore: null,
-    processedDataUrl: "",
-    stage: "等待處理",
-    busy: false,
-    error: ""
-  }));
+  state.adding = true;
+  setScanInputBusy(true);
 
-  state.pages.push(...pagesToProcess);
-  renderPages();
+  try {
+    const pagesToProcess = accepted.map(file => ({
+      id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`,
+      file,
+      mode: "enhanced",
+      rotation: 0,
+      corners: null,
+      warpGeometry: null,
+      suggestedCorners: null,
+      warpKind: null,
+      autoDetected: false,
+      detectionConfidence: null,
+      paperWhiteRatio: null,
+      paperAreaRatio: null,
+      autoLandscapeRotated: false,
+      blurScore: null,
+      processedDataUrl: "",
+      stage: "等待處理",
+      busy: false,
+      error: ""
+    }));
 
-  if (files.length > accepted.length) {
-    setEngineStatus(`已加入 ${accepted.length} 頁；最多支援 ${MAX_PAGES} 頁，超出的照片未加入。`, "warn");
-  } else {
-    setEngineStatus(`已收到 ${accepted.length} 張照片，準備掃描…`);
-  }
+    state.pages.push(...pagesToProcess);
+    renderPages();
 
-  if (!state.cvReady) {
-    const ready = await ensureScannerReady();
-    if (!ready) {
-      pagesToProcess.forEach(page => { page.error = "掃描引擎載入失敗，請重新整理後再試。"; });
-      renderPages();
-      setEngineStatus("掃描引擎載入失敗，請確認網路後重新整理。", "bad");
-      return;
+    if (files.length > accepted.length) {
+      setEngineStatus(`已加入 ${accepted.length} 頁；最多支援 ${MAX_PAGES} 頁，超出的照片未加入。`, "warn");
+    } else {
+      setEngineStatus(`已收到 ${accepted.length} 張照片，準備掃描…`);
     }
-  }
 
-  for (let i = 0; i < pagesToProcess.length; i++) {
-    const page = pagesToProcess[i];
-    setEngineStatus(`正在掃描第 ${i + 1} / ${pagesToProcess.length} 頁…`);
-    await processPage(page, {detect: true});
-  }
+    // Warm the PDF engine while the first scan is running, so the export
+    // button does not become the first place where a large CDN script loads.
+    void ensurePdfReady();
 
-  const failed = state.pages.filter(page => page.error).length;
-  setEngineStatus(
-    failed ? `有 ${failed} 頁處理失敗，請重新處理或重新拍攝。` : `完成，目前共 ${state.pages.length} 頁。`,
-    failed ? "warn" : "ok"
-  );
+    if (!state.cvReady) {
+      const ready = await ensureScannerReady();
+      if (!ready) {
+        pagesToProcess.forEach(page => { page.error = "掃描引擎載入失敗，請重新整理後再試。"; });
+        renderPages();
+        setEngineStatus("掃描引擎載入失敗，請確認網路後重新整理。", "bad");
+        return;
+      }
+    }
+
+    for (let i = 0; i < pagesToProcess.length; i++) {
+      const page = pagesToProcess[i];
+      setEngineStatus(`正在掃描第 ${i + 1} / ${pagesToProcess.length} 頁…`);
+      await processPage(page, {detect: true});
+    }
+
+    const failed = state.pages.filter(page => page.error).length;
+    setEngineStatus(
+      failed ? `有 ${failed} 頁處理失敗，請重新處理或重新拍攝。` : `完成，目前共 ${state.pages.length} 頁。`,
+      failed ? "warn" : "ok"
+    );
+  } finally {
+    state.adding = false;
+    setScanInputBusy(false);
+    renderPages();
+    updateExportState();
+  }
 }
 
 function pageWarnings(page) {
@@ -544,9 +635,14 @@ function renderPages() {
     const card = document.createElement("article");
     card.className = "page-card";
     card.dataset.pageId = page.id;
-    card.draggable = !page.busy;
+    const pageControlsBusy = page.busy || state.processing > 0 || state.adding || state.exporting || state.editorOpening;
+    card.draggable = !pageControlsBusy;
+    card.setAttribute("aria-busy", page.busy ? "true" : "false");
     const warnings = pageWarnings(page);
+    const cornerWarning = warnings.find(warning => warning.includes("四角"));
+    const needsCornerReview = Boolean(cornerWarning);
     const orientationText = page.outputWidth > page.outputHeight ? "橫向" : "請檢查方向";
+    if (needsCornerReview) card.classList.add("needs-corners");
 
     card.innerHTML = `
       <div class="thumb ${page.processedDataUrl ? "clickable" : ""}" data-act="${page.processedDataUrl ? "preview" : ""}">
@@ -561,17 +657,17 @@ function renderPages() {
           ${page.error ? page.error : page.busy ? `正在${page.stage || "處理"}…` : page.outputWidth ? `已完成 · ${orientationText}` : "準備中"}
         </div>
         <div class="mode-toggle" aria-label="頁面顯示模式">
-          <button type="button" data-mode="enhanced" class="${page.mode === "enhanced" ? "active" : ""}">作文清晰</button>
-          <button type="button" data-mode="original" class="${page.mode === "original" ? "active" : ""}">原稿</button>
+          <button type="button" data-mode="enhanced" class="${page.mode === "enhanced" ? "active" : ""}" ${pageControlsBusy ? "disabled" : ""}>作文清晰</button>
+          <button type="button" data-mode="original" class="${page.mode === "original" ? "active" : ""}" ${pageControlsBusy ? "disabled" : ""}>原稿</button>
         </div>
         <div class="page-actions">
-          ${page.processedDataUrl ? '<button type="button" data-act="preview">放大檢查</button>' : ""}
-          <button type="button" data-act="crop" ${page.busy ? "disabled" : ""}>調整四角</button>
-          <button type="button" data-act="rotate" ${page.busy ? "disabled" : ""}>右轉 90°</button>
-          ${page.error ? '<button type="button" data-act="retry">重新處理</button><button type="button" data-act="retake">重新拍攝</button>' : ""}
-          <button type="button" data-act="up" ${index === 0 ? "disabled" : ""}>上移</button>
-          <button type="button" data-act="down" ${index === state.pages.length - 1 ? "disabled" : ""}>下移</button>
-          <button type="button" data-act="delete" class="danger">刪除</button>
+          ${page.processedDataUrl ? `<button type="button" data-act="preview" ${pageControlsBusy ? "disabled" : ""}>放大檢查</button>` : ""}
+          <button type="button" data-act="crop" class="${needsCornerReview ? "corner-action" : ""}" ${pageControlsBusy ? "disabled" : ""}>調整四角</button>
+          <button type="button" data-act="rotate" ${pageControlsBusy ? "disabled" : ""}>右轉 90°</button>
+          ${page.error ? `<button type="button" data-act="retry" ${pageControlsBusy ? "disabled" : ""}>重新處理</button><button type="button" data-act="retake" ${pageControlsBusy ? "disabled" : ""}>重新拍攝</button>` : ""}
+          <button type="button" data-act="up" ${index === 0 || pageControlsBusy ? "disabled" : ""}>上移</button>
+          <button type="button" data-act="down" ${index === state.pages.length - 1 || pageControlsBusy ? "disabled" : ""}>下移</button>
+          <button type="button" data-act="delete" class="danger" ${pageControlsBusy ? "disabled" : ""}>刪除</button>
         </div>
       </div>
     `;
@@ -579,8 +675,25 @@ function renderPages() {
     card.querySelectorAll('[data-act="preview"]').forEach(element => {
       element.onclick = () => openPreview(page, index);
     });
-    card.querySelector('[data-act="crop"]').onclick = () => openCropEditor(page.id);
+    const cropButton = card.querySelector('[data-act="crop"]');
+    cropButton.onclick = async () => {
+      if (state.editorOpening || pageControlsBusy || page.busy || state.processing > 0 || state.adding || state.exporting) return;
+      const originalText = cropButton.textContent;
+      cropButton.disabled = true;
+      cropButton.setAttribute("aria-busy", "true");
+      cropButton.textContent = "開啟中…";
+      try {
+        await openCropEditor(page.id);
+      } finally {
+        if (cropButton.isConnected) {
+          cropButton.disabled = false;
+          cropButton.removeAttribute("aria-busy");
+          cropButton.textContent = originalText;
+        }
+      }
+    };
     card.querySelector('[data-act="rotate"]').onclick = async () => {
+      if (pageControlsBusy || page.busy || state.processing > 0 || state.exporting || state.editorOpening) return;
       page.rotation = (page.rotation + 90) % 360;
       await processPage(page);
     };
@@ -590,6 +703,7 @@ function renderPages() {
     const retakeButton = card.querySelector('[data-act="retake"]');
     if (retakeButton) {
       retakeButton.onclick = () => {
+        if (pageControlsBusy || page.busy || state.processing > 0 || state.exporting || state.editorOpening) return;
         state.replacePageId = page.id;
         replaceInput.click();
       };
@@ -598,6 +712,7 @@ function renderPages() {
     const retryButton = card.querySelector('[data-act="retry"]');
     if (retryButton) {
       retryButton.onclick = async () => {
+        if (pageControlsBusy || page.busy || state.processing > 0 || state.exporting || state.editorOpening) return;
         page.error = "";
         await processPage(page, {detect: !page.autoDetected});
       };
@@ -606,7 +721,7 @@ function renderPages() {
     card.querySelectorAll("[data-mode]").forEach(button => {
       button.onclick = async () => {
         const mode = button.dataset.mode;
-        if (page.mode === mode || page.busy) return;
+        if (page.mode === mode || page.busy || state.processing > 0 || state.adding || state.exporting || state.editorOpening) return;
         page.mode = mode;
         await processPage(page);
       };
@@ -683,7 +798,7 @@ function renderFinalReview() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = `review-page ${warnings.length || page.error ? "warn" : ""}`;
-    button.disabled = !page.processedDataUrl;
+    button.disabled = page.busy || state.processing > 0 || state.adding || state.exporting || state.editorOpening || !page.processedDataUrl;
     button.innerHTML = page.processedDataUrl
       ? `<img src="${page.processedDataUrl}" alt="第 ${index + 1} 頁最後檢查"><span>第 ${index + 1} 頁${warnings.length ? " · 請確認" : " · ✓"}</span>`
       : `<span>第 ${index + 1} 頁 · 尚未完成</span>`;
@@ -699,7 +814,7 @@ function applyPreviewScale() {
 }
 
 function openPreview(page, index) {
-  if (!page?.processedDataUrl) return;
+  if (!page?.processedDataUrl || page.busy || state.processing > 0 || state.adding || state.exporting || state.editorOpening) return;
   state.previewScale = 1;
   previewTitle.textContent = `第 ${index + 1} 頁｜放大檢查字跡`;
   previewImage.src = page.processedDataUrl;
@@ -726,6 +841,7 @@ previewDialog.addEventListener("close", () => {
 });
 
 function movePage(index, delta) {
+  if (state.processing > 0 || state.adding || state.exporting || state.editorOpening) return;
   const next = index + delta;
   if (next < 0 || next >= state.pages.length) return;
   [state.pages[index], state.pages[next]] = [state.pages[next], state.pages[index]];
@@ -733,6 +849,7 @@ function movePage(index, delta) {
 }
 
 function deletePage(index) {
+  if (state.processing > 0 || state.adding || state.exporting || state.editorOpening) return;
   state.pages.splice(index, 1);
   renderPages();
   updateExportState();
@@ -759,6 +876,17 @@ function drawCropEditor() {
   ctx.fill();
   ctx.stroke();
 
+  ctx.save();
+  ctx.strokeStyle = "rgba(239,68,68,.72)";
+  ctx.lineWidth = Math.max(6, cropCanvas.width / 180);
+  ctx.beginPath();
+  ctx.moveTo(cropCanvas.width / 2, 0);
+  ctx.lineTo(cropCanvas.width / 2, cropCanvas.height);
+  ctx.moveTo(0, cropCanvas.height / 2);
+  ctx.lineTo(cropCanvas.width, cropCanvas.height / 2);
+  ctx.stroke();
+  ctx.restore();
+
   const radius = Math.max(18, cropCanvas.width / 55);
   for (const point of points) {
     ctx.beginPath();
@@ -780,21 +908,11 @@ function pointerPosition(event) {
   };
 }
 
-function nearestCorner(position) {
-  const entries = Object.entries(state.editorCorners || {});
-  if (!entries.length) return null;
-  const rect = cropCanvas.getBoundingClientRect();
-  const threshold = 34 * (cropCanvas.width / rect.width);
-  let best = null;
-  let bestDistance = Infinity;
-  for (const [key, point] of entries) {
-    const d = distance(position, point);
-    if (d < bestDistance) {
-      bestDistance = d;
-      best = key;
-    }
-  }
-  return bestDistance <= threshold ? best : null;
+function cornerForQuadrant(position) {
+  const left = position.x < cropCanvas.width / 2;
+  const top = position.y < cropCanvas.height / 2;
+  if (top) return left ? "topLeftCorner" : "topRightCorner";
+  return left ? "bottomLeftCorner" : "bottomRightCorner";
 }
 
 function drawCropMagnifier(position) {
@@ -803,8 +921,12 @@ function drawCropMagnifier(position) {
   const displayScale = cropCanvas.width / Math.max(1, rect.width);
   const zoom = 3;
   const sampleSize = (cropMagnifier.width * displayScale) / zoom;
-  const sx = Math.max(0, Math.min(state.editorSource.width - sampleSize, position.x - sampleSize / 2));
-  const sy = Math.max(0, Math.min(state.editorSource.height - sampleSize, position.y - sampleSize / 2));
+  const pointX = Math.max(0, Math.min(state.editorSource.width, position.x));
+  const pointY = Math.max(0, Math.min(state.editorSource.height, position.y));
+  const sx = Math.max(0, Math.min(state.editorSource.width - sampleSize, pointX - sampleSize / 2));
+  const sy = Math.max(0, Math.min(state.editorSource.height - sampleSize, pointY - sampleSize / 2));
+  const crossX = (pointX - sx) * (cropMagnifier.width / sampleSize);
+  const crossY = (pointY - sy) * (cropMagnifier.height / sampleSize);
   const ctx = cropMagnifier.getContext("2d");
   ctx.clearRect(0, 0, cropMagnifier.width, cropMagnifier.height);
   ctx.imageSmoothingEnabled = true;
@@ -816,10 +938,10 @@ function drawCropMagnifier(position) {
   ctx.strokeStyle = "#ef4444";
   ctx.lineWidth = 2;
   ctx.beginPath();
-  ctx.moveTo(cropMagnifier.width / 2, 0);
-  ctx.lineTo(cropMagnifier.width / 2, cropMagnifier.height);
-  ctx.moveTo(0, cropMagnifier.height / 2);
-  ctx.lineTo(cropMagnifier.width, cropMagnifier.height / 2);
+  ctx.moveTo(crossX, 0);
+  ctx.lineTo(crossX, cropMagnifier.height);
+  ctx.moveTo(0, crossY);
+  ctx.lineTo(cropMagnifier.width, crossY);
   ctx.stroke();
   cropMagnifier.classList.add("visible");
 }
@@ -830,10 +952,11 @@ function hideCropMagnifier() {
 
 cropCanvas.addEventListener("pointerdown", event => {
   if (!state.editorCorners) return;
-  const key = nearestCorner(pointerPosition(event));
+  const position = pointerPosition(event);
+  const key = cornerForQuadrant(position);
   if (!key) return;
   state.draggingCorner = key;
-  drawCropMagnifier(pointerPosition(event));
+  drawCropMagnifier(state.editorCorners[key]);
   cropCanvas.setPointerCapture(event.pointerId);
   event.preventDefault();
 });
@@ -841,12 +964,13 @@ cropCanvas.addEventListener("pointerdown", event => {
 cropCanvas.addEventListener("pointermove", event => {
   if (!state.draggingCorner || !state.editorCorners) return;
   const pos = pointerPosition(event);
-  state.editorCorners[state.draggingCorner] = {
+  const nextPosition = {
     x: Math.max(0, Math.min(cropCanvas.width, pos.x)),
     y: Math.max(0, Math.min(cropCanvas.height, pos.y))
   };
+  state.editorCorners[state.draggingCorner] = nextPosition;
   drawCropEditor();
-  drawCropMagnifier(pos);
+  drawCropMagnifier(nextPosition);
   event.preventDefault();
 });
 
@@ -863,17 +987,29 @@ cropCanvas.addEventListener("pointercancel", endCornerDrag);
 
 async function openCropEditor(pageId) {
   const page = state.pages.find(item => item.id === pageId);
-  if (!page || page.busy) return;
+  if (!page || page.busy || state.editorOpening || cropDialog.open) return;
+
+  state.editorOpening = true;
+  renderPages();
+  setEngineStatus("正在開啟四角調整，請稍候…");
+  await nextPaint();
 
   try {
     const source = await loadFileToCanvas(page.file);
     state.editorPageId = pageId;
     state.editorSource = source;
-    state.editorCorners = cloneCorners(page.corners) || defaultCorners(source.width, source.height);
+    const suggestedCorners = page.suggestedCorners && validCorners(page.suggestedCorners, source.width, source.height)
+      ? page.suggestedCorners
+      : null;
+    state.editorCorners = cloneCorners(suggestedCorners || page.corners) || defaultCorners(source.width, source.height);
     drawCropEditor();
     cropDialog.showModal();
+    setEngineStatus("請在圖片四個區域內拖曳，調整對應紙張角點。", "ok");
   } catch (error) {
     setEngineStatus(error.message, "bad");
+  } finally {
+    state.editorOpening = false;
+    renderPages();
   }
 }
 
@@ -883,6 +1019,8 @@ redetectBtn.addEventListener("click", async () => {
   redetectBtn.disabled = true;
   const originalText = redetectBtn.textContent;
   redetectBtn.textContent = "偵測中…";
+  setEngineStatus("正在重新自動偵測，請稍候…");
+  await nextPaint();
 
   try {
     const ready = await ensureScannerReady();
@@ -910,17 +1048,33 @@ redetectBtn.addEventListener("click", async () => {
 
 saveCropBtn.addEventListener("click", async () => {
   const page = state.pages.find(item => item.id === state.editorPageId);
-  if (!page || !state.editorCorners) return;
+  if (state.cropApplying || !page || !state.editorCorners || !state.editorSource) return;
   if (!validCorners(state.editorCorners, state.editorSource.width, state.editorSource.height)) {
     setEngineStatus("四角範圍太小或交錯，請重新調整。", "warn");
     return;
   }
 
+  state.cropApplying = true;
+  const originalText = saveCropBtn.textContent;
+  saveCropBtn.disabled = true;
+  saveCropBtn.setAttribute("aria-busy", "true");
+  saveCropBtn.textContent = "套用中…";
   page.corners = cloneCorners(state.editorCorners);
+  page.warpGeometry = null;
+  page.suggestedCorners = null;
+  page.warpKind = "manual";
   page.autoDetected = true;
   page.detectionConfidence = 1;
+  setEngineStatus("正在套用裁切並重新處理，請稍候…");
   cropDialog.close();
-  await processPage(page);
+  try {
+    await processPage(page);
+  } finally {
+    state.cropApplying = false;
+    saveCropBtn.disabled = false;
+    saveCropBtn.removeAttribute("aria-busy");
+    saveCropBtn.textContent = originalText;
+  }
 });
 
 cropDialog.addEventListener("close", () => {
@@ -933,34 +1087,44 @@ cropDialog.addEventListener("close", () => {
 
 async function exportPdf() {
   const filename = currentFilename();
-  if (!filename || !state.pages.length) return;
+  const readyPages = state.pages.length > 0 && state.pages.every(page => page.processedDataUrl && !page.busy);
+  if (state.exporting || !filename || !readyPages || state.processing > 0) return;
 
+  state.exporting = true;
   exportBtn.disabled = true;
-  setExportStatus("正在準備 PDF…");
-
-  const pdfReady = await ensurePdfReady();
-  if (!pdfReady) {
-    setExportStatus("PDF 引擎載入失敗，請確認網路後再試。", "bad");
-    updateExportState();
-    return;
-  }
-
-  setExportStatus("正在產生 PDF…");
+  exportBtn.setAttribute("aria-busy", "true");
+  exportBtn.textContent = "正在準備 PDF…";
+  setExportStatus("正在準備 PDF，請不要重複按…");
+  renderPages();
+  await nextPaint();
 
   try {
+    const pdfReady = await ensurePdfReady();
+    if (!pdfReady) {
+      setExportStatus("PDF 引擎載入失敗，請確認網路後再試。", "bad");
+      return;
+    }
+
+    exportBtn.textContent = "正在產生 PDF…";
+    setExportStatus(`正在產生 PDF（共 ${state.pages.length} 頁）…`);
+    await nextPaint();
+
     const {jsPDF} = window.jspdf;
     const pdf = new jsPDF({orientation: "l", unit: "mm", format: "a4", compress: true});
     const pageW = 297;
     const pageH = 210;
     const margin = 6;
 
-    state.pages.forEach((page, index) => {
+    for (let index = 0; index < state.pages.length; index++) {
+      const page = state.pages[index];
       if (index > 0) pdf.addPage("a4", "l");
       const maxW = pageW - margin * 2;
       const maxH = pageH - margin * 2;
       const scale = Math.min(maxW / page.outputWidth, maxH / page.outputHeight);
       const width = page.outputWidth * scale;
       const height = page.outputHeight * scale;
+      setExportStatus(`正在產生 PDF：第 ${index + 1} / ${state.pages.length} 頁…`);
+      await nextPaint();
       pdf.addImage(
         page.processedDataUrl,
         "JPEG",
@@ -971,8 +1135,11 @@ async function exportPdf() {
         undefined,
         "FAST"
       );
-    });
+    }
 
+    exportBtn.textContent = "正在完成 PDF…";
+    setExportStatus("正在完成 PDF…");
+    await nextPaint();
     const bytes = pdf.output("arraybuffer").byteLength;
     pdf.save(filename);
     setExportStatus(`已下載：${filename}（約 ${humanBytes(bytes)}）`, "ok");
@@ -980,6 +1147,10 @@ async function exportPdf() {
     console.error(error);
     setExportStatus(`PDF 產生失敗：${error.message || "未知錯誤"}`, "bad");
   } finally {
+    state.exporting = false;
+    exportBtn.removeAttribute("aria-busy");
+    exportBtn.textContent = EXPORT_BUTTON_LABEL;
+    renderPages();
     updateExportState();
   }
 }
@@ -997,11 +1168,14 @@ replaceInput.addEventListener("change", async event => {
   const page = state.pages.find(item => item.id === state.replacePageId);
   state.replacePageId = null;
   event.target.value = "";
-  if (!file || !page) return;
+  if (!file || !page || page.busy || state.processing > 0 || state.adding) return;
 
   page.file = file;
   page.rotation = 0;
   page.corners = null;
+  page.warpGeometry = null;
+  page.suggestedCorners = null;
+  page.warpKind = null;
   page.autoDetected = false;
   page.detectionConfidence = null;
   page.paperWhiteRatio = null;
@@ -1013,6 +1187,7 @@ replaceInput.addEventListener("change", async event => {
   page.outputHeight = null;
   page.outputBytes = null;
   page.error = "";
+  setEngineStatus("已收到替換照片，正在重新掃描…");
   await processPage(page, {detect: true});
 });
 
@@ -1031,8 +1206,8 @@ exportBtn.addEventListener("click", exportPdf);
 
 function runSelfChecks() {
   console.assert(
-    buildFilename({className: "116", seatNo: "1", studentName: "張沛芸", essayTitle: "通關密語", practice: "一"}) ===
-      "116-1_張沛芸_通關密語（一）.pdf",
+    buildFilename({className: "116", seatNo: "1", studentName: "林小弦", essayTitle: "通關密語", practice: "一"}) ===
+      "116-1_林小弦_通關密語（一）.pdf",
     "filename contract failed"
   );
   const corners = defaultCorners(1000, 1400);
@@ -1107,24 +1282,27 @@ async function runBrowserSelfTest() {
     if (!page.processedDataUrl || page.processedDataUrl.length < 1000) throw new Error("掃描結果未產生");
     if (!validCorners(page.corners, page.sourceWidth, page.sourceHeight)) throw new Error("紙張四角無效");
     if (page.outputWidth <= page.outputHeight) throw new Error("作文預設應為橫向");
+    const initialWarpGeometry = JSON.stringify(page.warpGeometry);
 
     page.rotation = 90;
     await processPage(page);
     if (!page.processedDataUrl) throw new Error("旋轉後處理失敗");
+    if (JSON.stringify(page.warpGeometry) !== initialWarpGeometry) throw new Error("旋轉不應遺失自動校正幾何");
 
     page.rotation = 0;
     page.mode = "original";
     await processPage(page);
     if (!page.processedDataUrl) throw new Error("原稿模式處理失敗");
+    if (JSON.stringify(page.warpGeometry) !== initialWarpGeometry) throw new Error("原稿模式不應遺失自動校正幾何");
 
     $("#className").value = "116";
     $("#seatNo").value = "1";
-    $("#studentName").value = "張沛芸";
+    $("#studentName").value = "林小弦";
     $("#essayTitle").value = "通關密語";
     $("#practice").value = "一";
     updateFilename();
 
-    const expected = "116-1_張沛芸_通關密語（一）.pdf";
+    const expected = "116-1_林小弦_通關密語（一）.pdf";
     if (currentFilename() !== expected) throw new Error("檔名規則失敗");
 
     const pdfReady = await ensurePdfReady();
